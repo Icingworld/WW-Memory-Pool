@@ -1,6 +1,6 @@
 #pragma once
 
-#include <vector>
+#include <array>
 #include <unordered_map>
 
 #include <SpanList.h>
@@ -14,7 +14,7 @@ namespace WW
 class PageCache
 {
 private:
-    std::vector<SpanList> spans;                        // 页段链表数组
+    std::array<SpanList, 128> spans;                    // 页段链表数组
     std::unordered_map<std::size_t, Span *> span_map;   // 页号到页段的映射
     std::recursive_mutex mutex;                         // 页缓存锁
 

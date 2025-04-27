@@ -39,6 +39,16 @@ Span * SpanList::back() const noexcept
     return head->prev;
 }
 
+Span * SpanList::begin() const noexcept
+{
+    return head->next;
+}
+
+Span * SpanList::end() const noexcept
+{
+    return head;
+}
+
 void SpanList::push_front(Span * span)
 {
     span->next = head->next;
@@ -78,7 +88,7 @@ bool SpanList::empty() const noexcept
     return head->next == head;
 }
 
-std::mutex & SpanList::get_mutex()
+std::recursive_mutex & SpanList::get_mutex()
 {
     return mutex;
 }

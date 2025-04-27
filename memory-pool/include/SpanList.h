@@ -35,7 +35,7 @@ class SpanList
 {
 private:
     Span * head;                    // 虚拟头节点
-    std::mutex mutex;               // 链表锁
+    std::recursive_mutex mutex;     // 链表锁
 
 public:
     SpanList();
@@ -52,6 +52,16 @@ public:
      * @brief 获取最后一个页段
      */
     Span * back() const noexcept;
+
+    /**
+     * @brief 获取链表头部
+     */
+    Span * begin() const noexcept;
+
+    /**
+     * @brief 获取链表尾部
+     */
+    Span * end() const noexcept;
 
     /**
      * @brief 页段链表是否为空
@@ -87,7 +97,7 @@ public:
     /**
      * @brief 获取链表锁
      */
-    std::mutex & get_mutex();
+    std::recursive_mutex & get_mutex();
 };
 
 } // namespace WW

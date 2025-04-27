@@ -4,7 +4,6 @@ namespace WW
 {
 
 PageCache::PageCache()
-    : spans(128)
 {
 }
 
