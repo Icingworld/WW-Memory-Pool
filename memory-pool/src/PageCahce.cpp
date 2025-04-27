@@ -83,6 +83,8 @@ Span * PageCache::fetchSpan(std::size_t page_count)
 void PageCache::returnSpan(Span * span)
 {
     std::size_t old_page_count = span->page_count;
+    span->size = 0;
+
     std::lock_guard<std::recursive_mutex> lock(mutex);
 
     // 向前寻找空闲的页
@@ -93,7 +95,7 @@ void PageCache::returnSpan(Span * span)
 
         std::size_t page_id_prev = span->page_id - 1;
         auto it = span_map.find(page_id_prev);
-        if (it == span_map.end() || it->second->size == 0) {
+        if (it == span_map.end() || it->second->size != 0) {
             // 没找到空闲页
             break;
         }
@@ -116,7 +118,7 @@ void PageCache::returnSpan(Span * span)
     while (true) {
         std::size_t page_id_next = span->page_id + span->page_count;
         auto it = span_map.find(page_id_next);
-        if (it == span_map.end() || it->second->size == 0) {
+        if (it == span_map.end() || it->second->size != 0) {
             // 没找到空闲页
             break;
         }
