@@ -11,7 +11,8 @@ namespace WW
 class ThreadCache
 {
 private:
-    std::array<FreeList, 236> freelists;        // 自由表数组
+    CentralCache & central_cache;               // 中心缓存
+    std::array<FreeList, 208> freelists;        // 自由表数组
 
 private:
     ThreadCache();
@@ -66,7 +67,7 @@ private:
     /**
      * @brief 将一批内存块还给中心缓存
      */
-    void returnToCentralCache(FreeObject * freelist);
+    void returnToCentralCache(std::size_t index, std::size_t nums);
 };
     
 } // namespace WW

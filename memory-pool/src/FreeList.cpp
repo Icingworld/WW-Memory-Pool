@@ -19,6 +19,7 @@ FreeObject::~FreeObject()
 
 FreeList::FreeList()
     : head(nullptr)
+    , freesize(0)
 {
 }
 
@@ -31,11 +32,13 @@ void FreeList::push_front(FreeObject * free_object)
 {
     free_object->next = head;
     head = free_object;
+    ++freesize;
 }
 
 void FreeList::pop_front()
 {
     head = head->next;
+    --freesize;
 }
 
 bool FreeList::empty() const noexcept
@@ -46,6 +49,11 @@ bool FreeList::empty() const noexcept
 void FreeList::clear()
 {
     head = nullptr;
+}
+
+std::size_t FreeList::size() const noexcept
+{
+    return freesize;
 }
 
 } // namespace WW

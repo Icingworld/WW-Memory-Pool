@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+
 namespace WW
 {
 
@@ -25,7 +27,8 @@ public:
 class FreeList
 {
 private:
-    FreeObject * head;  // 链表头部，不是虚拟节点
+    FreeObject * head;      // 链表头部，不是虚拟节点
+    std::size_t freesize;   // 空闲内存块数量
 
 public:
     FreeList();
@@ -55,6 +58,11 @@ public:
      * @brief 清空链表
      */
     void clear();
+
+    /**
+     * @brief 获取空闲内存块数量
+     */
+    std::size_t size() const noexcept;
 };
 
 } // namespace WW
