@@ -82,28 +82,24 @@ void CentralCache::returnRange(std::size_t index, FreeObject * free_object)
 
 std::size_t CentralCache::indexToSize(std::size_t index) const noexcept
 {
-    if (index < 128) {
-        // 0 ~ 127，8B对齐
+    if (index <= 15) {
+        // 8字节对齐
         return (index + 1) * 8;
+    } else if (index <= 71) {
+        // 16字节对齐
+        return 128 + (index - 15) * 16;
+    } else if (index <= 127) {
+        // 128字节对齐
+        return 1024 + (index - 71) * 128;
+    } else if (index <= 183) {
+        // 1024字节对齐
+        return 8192 + (index - 127) * 1024;
+    } else if (index <= 207) {
+        // 8192字节对齐
+        return 65536 + (index - 183) * 8192;
+    } else {
+        return 0;
     }
-    index -= 128;
-    if (index < 56) {
-        // 128 ~ 183，每128B对齐
-        return 1024 + (index + 1) * 128;
-    }
-    index -= 56;
-    if (index < 24) {
-        // 184 ~ 207，每1024B对齐
-        return 8192 + (index + 1) * 1024;
-    }
-    index -= 24;
-    if (index < 28) {
-        // 208 ~ 235，每8KB对齐
-        return 32768 + (index + 1) * 8192;
-    }
-
-    // 超出范围
-    return 0;
 }
 
 Span * CentralCache::getFreeSpan(std::size_t index)

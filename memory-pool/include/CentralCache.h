@@ -12,7 +12,7 @@ class CentralCache
 {
 private:
     PageCache & page_cache;                 // 页缓存
-    std::array<SpanList, 236> spans;        // 页段链表数组
+    std::array<SpanList, 208> spans;        // 页段链表数组
 
 private:
     CentralCache();
