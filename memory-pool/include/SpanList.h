@@ -19,8 +19,8 @@ public:
     std::size_t page_count;         // 页数
     Span * prev;                    // 前一个页段
     Span * next;                    // 后一个页段
-    FreeObject * freelist;          // 空闲内存块
-    std::size_t size;               // 内存块大小，为0说明没有被使用
+    FreeList freelist;              // 空闲内存块
+    std::size_t used;               // 已使用的内存块数
 
 public:
     Span();

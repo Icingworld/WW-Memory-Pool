@@ -8,8 +8,8 @@ Span::Span()
     , page_count(0)
     , prev(nullptr)
     , next(nullptr)
-    , freelist(nullptr)
-    , size(0)
+    , freelist()
+    , used(0)
 {
 }
 
