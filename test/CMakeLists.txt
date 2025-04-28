@@ -15,3 +15,12 @@ target_link_libraries(centralcache_test PRIVATE
     GTest::gtest
     GTest::gtest_main
 )
+
+# threadcache_test.cpp
+add_executable(threadcache_test threadcache_test.cpp)
+
+target_link_libraries(threadcache_test PRIVATE
+    WW::memory
+    GTest::gtest
+    GTest::gtest_main
+)
