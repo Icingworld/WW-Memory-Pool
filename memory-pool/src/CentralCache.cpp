@@ -64,6 +64,7 @@ void CentralCache::returnRange(std::size_t index, FreeObject * free_object)
         // 查找该内存块属于哪个页段
         Span * span = page_cache.FreeObjectToSpan(free_object);
         // 将内存块加入到该页段的空闲链表中
+        FreeObject * next = free_object->next;
         span->freelist.push_front(free_object);
         // 同步页段使用数量
         --span->used;
@@ -75,7 +76,7 @@ void CentralCache::returnRange(std::size_t index, FreeObject * free_object)
             page_cache.returnSpan(span);
         }
 
-        free_object = free_object->next;
+        free_object = next;
     }
 }
 
