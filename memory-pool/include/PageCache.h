@@ -46,6 +46,11 @@ public:
      */
     void returnSpan(Span * span);
 
+    /**
+     * @brief 通过内存地址找到所属页段
+     */
+    Span * FreeObjectToSpan(void * ptr);
+
 private:
     /**
      * @brief 从系统内存中获取指定大小的内存

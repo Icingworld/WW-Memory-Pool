@@ -82,7 +82,6 @@ Span * PageCache::fetchSpan(std::size_t page_count)
 void PageCache::returnSpan(Span * span)
 {
     std::size_t old_page_count = span->page_count;
-    span->size = 0;
 
     std::lock_guard<std::recursive_mutex> lock(mutex);
 
@@ -94,7 +93,7 @@ void PageCache::returnSpan(Span * span)
 
         std::size_t page_id_prev = span->page_id - 1;
         auto it = span_map.find(page_id_prev);
-        if (it == span_map.end() || it->second->size != 0) {
+        if (it == span_map.end() || it->second->used != 0) {
             // 没找到空闲页
             break;
         }
@@ -117,7 +116,7 @@ void PageCache::returnSpan(Span * span)
     while (true) {
         std::size_t page_id_next = span->page_id + span->page_count;
         auto it = span_map.find(page_id_next);
-        if (it == span_map.end() || it->second->size != 0) {
+        if (it == span_map.end() || it->second->used != 0) {
             // 没找到空闲页
             break;
         }
@@ -141,6 +140,19 @@ void PageCache::returnSpan(Span * span)
     span_map[span->page_id] = span;
     // 尾页号插入哈希表
     span_map[span->page_id + span->page_count - 1] = span;
+}
+
+Span * PageCache::FreeObjectToSpan(void * ptr)
+{
+    std::uintptr_t page_id = reinterpret_cast<std::uintptr_t>(ptr) >> 12;
+
+    std::lock_guard<std::recursive_mutex> lock(mutex);
+    auto it = span_map.find(page_id);
+    if (it == span_map.end()) {
+        return nullptr;
+    }
+
+    return it->second;
 }
 
 void * PageCache::fetchFromSystem(std::size_t page_count) const noexcept
