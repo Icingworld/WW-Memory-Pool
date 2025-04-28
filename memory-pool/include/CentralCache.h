@@ -40,8 +40,10 @@ public:
 
     /**
      * @brief 将空闲内存块归还到中心缓存
+     * @param index 索引
+     * @param free_object 空闲内存块链表
      */
-    void returnRange(FreeObject * free_object);
+    void returnRange(std::size_t index, FreeObject * free_object);
 
 private:
     /**

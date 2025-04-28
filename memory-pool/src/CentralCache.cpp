@@ -25,7 +25,58 @@ FreeObject * CentralCache::fetchRange(std::size_t index, std::size_t count)
     // 锁住index对应链表
     std::lock_guard<std::recursive_mutex> lock(spans[index].get_mutex());
 
-    
+    // 获取一个合适的空闲页
+    Span * span = getFreeSpan(index);
+    FreeObject * head = span->freelist.front();
+    span->freelist.pop_front();
+    ++span->used;
+
+    // 从空闲页中获取空闲内存块
+    FreeObject * tail = head;
+    for (std::size_t i = 1; i < count; ++i) {
+        if (span->freelist.empty()) {
+            // 该页段使用完毕，还不够，直接退出
+            break;
+        }
+
+        // 还有空闲内存块，取出来直接挂上
+        FreeObject * new_object = span->freelist.front();
+        span->freelist.pop_front();
+        tail->next = new_object;
+        tail = new_object;
+
+        // 修改使用数量
+        ++span->used;
+    }
+
+    tail->next = nullptr;
+
+    return head;
+}
+
+void CentralCache::returnRange(std::size_t index, FreeObject * free_object)
+{
+    // 锁住index对应链表
+    std::lock_guard<std::recursive_mutex> lock(spans[index].get_mutex());
+
+    // 依次归还空闲内存块
+    while (free_object != nullptr) {
+        // 查找该内存块属于哪个页段
+        Span * span = page_cache.FreeObjectToSpan(free_object);
+        // 将内存块加入到该页段的空闲链表中
+        span->freelist.push_front(free_object);
+        // 同步页段使用数量
+        --span->used;
+
+        if (span->used == 0) {
+            // 从链表中删除
+            spans[index].erase(span);
+            // 归还页缓存
+            page_cache.returnSpan(span);
+        }
+
+        free_object = free_object->next;
+    }
 }
 
 std::size_t CentralCache::indexToSize(std::size_t index) const noexcept
@@ -59,7 +110,7 @@ Span * CentralCache::getFreeSpan(std::size_t index)
     Span * span = spans[index].begin();
     while (span != spans[index].end()) {
         // 查看是否有已经切过的页
-        if (span->freelist != nullptr) {
+        if (!span->freelist.empty()) {
             return span;
         } else {
             span = span->next;
@@ -93,24 +144,18 @@ Span * CentralCache::getFreeSpan(std::size_t index)
     void * ptr = reinterpret_cast<void *>(span->page_id << 12);
 
     // 计算每个内存块的大小并将其挂到 freelist 上
-    FreeObject * freelist = nullptr;
-    std::size_t block_num = std::min(max_nums, span->page_count * 4096 / size);
+    std::size_t block_num = span->page_count * 4096 / size;
     for (std::size_t i = 0; i < block_num; ++i) {
         // 偏移每次一个内存块的大小
         void * block_ptr = static_cast<char *>(ptr) + i * size;
-
         // 创建 FreeObject 来管理内存块
         FreeObject * free_obj = reinterpret_cast<FreeObject *>(block_ptr);
-        
-        // 设置这个内存块的 freelist 指针
-        free_obj->next = freelist;
-
         // 将此内存块挂到 freelist 上
-        freelist = free_obj;
+        span->freelist.push_front(free_obj);
     }
 
-    // 将 freelist 挂到对应的链表上
-    span->freelist = freelist;
+    // 将页段挂到链表上
+    spans[index].push_back(span);
 
     return span;
 }
