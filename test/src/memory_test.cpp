@@ -45,6 +45,6 @@ TEST_F(MemoryTest, SingleThreadMemoryTest)
     EXPECT_EQ(p->id, std::this_thread::get_id());
 
     alloc.destroy(p);
-    
+
     alloc.deallocate(p, 1);
 }
