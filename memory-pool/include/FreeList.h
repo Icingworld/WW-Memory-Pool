@@ -10,17 +10,13 @@ namespace WW
  */
 class FreeObject
 {
-public:
-    using pointer = FreeObject *;
-    using reference = FreeObject &;
-
 private:
-    pointer _Next;  // 下一个空闲内存块
+    FreeObject * _Next;  // 下一个空闲内存块
 
 public:
     FreeObject();
 
-    explicit FreeObject(pointer next);
+    explicit FreeObject(FreeObject * next);
 
     ~FreeObject() = default;
 
@@ -28,12 +24,12 @@ public:
     /**
      * @brief 获取下一个空闲内存块
      */
-    pointer next() const noexcept;
+    FreeObject * next() const noexcept;
 
     /**
      * @brief 设置下一个空闲内存块
      */
-    void setNext(pointer next) noexcept;
+    void setNext(FreeObject * next) noexcept;
 };
 
 /**
@@ -41,15 +37,11 @@ public:
  */
 class FreeListIterator
 {
-public:
-    using pointer = FreeObject::pointer;
-    using reference = FreeObject::reference;
-
 private:
-    pointer _Free_object;       // 空闲内存块指针
+    FreeObject * _Free_object;       // 空闲内存块指针
 
 public:
-    explicit FreeListIterator(pointer free_object) noexcept;
+    explicit FreeListIterator(FreeObject * free_object) noexcept;
 
     ~FreeListIterator() = default;
 
@@ -68,12 +60,12 @@ public:
      * @brief 解引用迭代器
      * @details 对于内存块，解引用直接返回内存块地址
      */
-    pointer operator*() noexcept;
+    FreeObject * operator*() noexcept;
 
     /**
      * @brief 解引用迭代器
      */
-    pointer operator->() noexcept;
+    FreeObject * operator->() noexcept;
 
     /**
      * @brief 向后移动
@@ -93,14 +85,12 @@ public:
 class FreeList
 {
 public:
-    using size_type = std::uint16_t;    // 内存块数量范围为0-65535，使用uint16_t存储
+    using block_count = std::uint16_t;      // 内存块数量范围为0-65535，使用uint16_t存储
     using iterator = FreeListIterator;
-    using pointer = FreeListIterator::pointer;
-    using reference = FreeListIterator::reference;
 
 private:
-    pointer _Head;      // 虚拟头节点
-    size_type _Size;    // 空闲内存块数量
+    FreeObject * _Head;         // 虚拟头节点
+    block_count _Size;          // 空闲内存块数量
 
 public:
     FreeList();
@@ -111,12 +101,12 @@ public:
     /**
      * @brief 获取链表头部元素
      */
-    pointer front() noexcept;
+    FreeObject * front() noexcept;
 
     /**
      * @brief 将空闲内存块插入到链表头部
      */
-    void push_front(pointer free_object);
+    void push_front(FreeObject * free_object);
 
     /**
      * @brief 从链表头部移除内存块
@@ -141,7 +131,7 @@ public:
     /**
      * @brief 获取空闲内存块数量
      */
-    size_type size() const noexcept;
+    block_count size() const noexcept;
 };
 
 } // namespace WW

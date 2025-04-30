@@ -18,7 +18,7 @@ Span::page_id Span::id() const noexcept
     return _Page_id;
 }
 
-void Span::setId(Span::page_id page_id) noexcept
+void Span::setId(page_id page_id) noexcept
 {
     _Page_id = page_id;
 }
@@ -28,42 +28,47 @@ Span::page_count Span::count() const noexcept
     return _Page_count;
 }
 
-void Span::setCount(Span::page_count count) noexcept
+void Span::setCount(page_count count) noexcept
 {
     _Page_count = count;
 }
 
-Span::pointer Span::prev() const noexcept
+Span * Span::prev() const noexcept
 {
     return _Prev;
 }
 
-void Span::setPrev(Span::pointer prev) noexcept
+void Span::setPrev(Span * prev) noexcept
 {
     _Prev = prev;
 }
 
-Span::pointer Span::next() const noexcept
+Span * Span::next() const noexcept
 {
     return _Next;
 }
 
-void Span::setNext(Span::pointer next) noexcept
+void Span::setNext(Span * next) noexcept
 {
     _Next = next;
 }
 
-Span::block_type Span::used() const noexcept
+Span::block_count Span::used() const noexcept
 {
     return _Used;
 }
 
-void Span::setUsed(Span::block_type used) noexcept
+void Span::setUsed(block_count used) noexcept
 {
     _Used = used;
 }
 
-SpanListIterator::SpanListIterator(SpanListIterator::pointer span) noexcept
+Span::page_id Span::ptrToId(void * ptr) noexcept
+{
+    return reinterpret_cast<std::uintptr_t>(ptr) >> PAGE_SHIFT;
+}
+
+SpanListIterator::SpanListIterator(Span * span) noexcept
     : _Span(span)
 {
 }
@@ -78,12 +83,12 @@ bool SpanListIterator::operator!=(const SpanListIterator & other) const noexcept
     return _Span != other._Span;
 }
 
-SpanListIterator::reference SpanListIterator::operator*() noexcept
+Span & SpanListIterator::operator*() noexcept
 {
     return *_Span;
 }
 
-SpanListIterator::pointer SpanListIterator::operator->() noexcept
+Span * SpanListIterator::operator->() noexcept
 {
     return _Span;
 }
@@ -127,12 +132,12 @@ SpanList::~SpanList()
     delete _Head;
 }
 
-SpanList::reference SpanList::front() noexcept
+Span & SpanList::front() noexcept
 {
     return *_Head->next();
 }
 
-SpanList::reference SpanList::back() noexcept
+Span & SpanList::back() noexcept
 {
     return *_Head->prev();
 }
@@ -147,7 +152,7 @@ SpanList::iterator SpanList::end() noexcept
     return iterator(_Head);
 }
 
-void SpanList::push_front(SpanList::pointer span)
+void SpanList::push_front(Span * span)
 {
     span->setNext(_Head->next());
     span->setPrev(_Head);
@@ -155,7 +160,7 @@ void SpanList::push_front(SpanList::pointer span)
     _Head->setNext(span);
 }
 
-void SpanList::push_back(SpanList::pointer span)
+void SpanList::push_back(Span * span)
 {
     span->setNext(_Head);
     span->setPrev(_Head->prev());
@@ -175,7 +180,7 @@ void SpanList::pop_back()
     _Head->prev()->setNext(_Head);
 }
 
-void SpanList::erase(SpanList::pointer span)
+void SpanList::erase(Span * span)
 {
     span->prev()->setNext(span->next());
     span->next()->setPrev(span->prev());

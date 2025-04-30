@@ -7,6 +7,9 @@
 namespace WW
 {
 
+constexpr std::size_t PAGE_SIZE = 4096;         // 单页大小
+constexpr std::size_t PAGE_SHIFT = 12;          // 页号计算移位数
+
 /**
  * @brief 页段
  * @details 维护一大段连续的内存
@@ -16,17 +19,15 @@ class Span
 public:
     using page_id = std::size_t;        // 页段号使用size_t存储
     using page_count = std::uint8_t;    // 页数范围为1-128，使用uint8_t存储
-    using block_type = std::uint16_t;   // 内存块数量范围为0-65535，使用uint16_t存储
-    using pointer = Span *;
-    using reference = Span &;
+    using block_count = std::uint16_t;  // 内存块数量范围为0-65535，使用uint16_t存储
 
 private:
     FreeList _Free_list;            // 空闲内存块
     page_id _Page_id;               // 页段号
-    pointer _Prev;                  // 前一个页段
-    pointer _Next;                  // 后一个页段 
+    Span * _Prev;                   // 前一个页段
+    Span * _Next;                   // 后一个页段 
     page_count _Page_count;         // 页数
-    block_type _Used;               // 已使用的内存块数
+    block_count _Used;              // 已使用的内存块数
 
 public:
     Span();
@@ -57,32 +58,37 @@ public:
     /**
      * @brief 获取上一个页段
      */
-    pointer prev() const noexcept;
+    Span * prev() const noexcept;
 
     /**
      * @brief 设置上一个页段
      */
-    void setPrev(pointer prev) noexcept;
+    void setPrev(Span * prev) noexcept;
 
     /**
      * @brief 获取下一个页段
      */
-    pointer next() const noexcept;
+    Span * next() const noexcept;
 
     /**
      * @brief 设置下一个页段
      */
-    void setNext(pointer next) noexcept;
+    void setNext(Span * next) noexcept;
 
     /**
      * @brief 获取空闲内存块数量
      */
-    block_type used() const noexcept;
+    block_count used() const noexcept;
 
     /**
      * @brief 设置空闲内存块数量
      */
-    void setUsed(block_type used) noexcept;
+    void setUsed(block_count used) noexcept;
+
+    /**
+     * @brief 将内存地址转为页号
+     */
+    static page_id ptrToId(void * ptr) noexcept;
 };
 
 /**
@@ -90,15 +96,11 @@ public:
  */
 class SpanListIterator
 {
-public:
-    using pointer = Span::pointer;
-    using reference = Span::reference;
-
 private:
-    pointer _Span;      // 页段指针
+    Span * _Span;      // 页段指针
 
 public:
-    explicit SpanListIterator(pointer span) noexcept;
+    explicit SpanListIterator(Span * span) noexcept;
 
     ~SpanListIterator() = default;
 
@@ -116,12 +118,12 @@ public:
     /**
      * @brief 解引用迭代器
      */
-    reference operator*() noexcept;
+    Span & operator*() noexcept;
 
     /**
      * @brief 解引用迭代器
      */
-    pointer operator->() noexcept;
+    Span * operator->() noexcept;
 
     /**
      * @brief 向后移动
@@ -152,11 +154,9 @@ class SpanList
 {
 public:
     using iterator = SpanListIterator;
-    using pointer = SpanListIterator::pointer;
-    using reference = SpanListIterator::reference;
 
 private:
-    pointer _Head;                      // 虚拟头节点
+    Span * _Head;                       // 虚拟头节点
     std::recursive_mutex _Mutex;        // 链表递归锁
 
 public:
@@ -168,12 +168,12 @@ public:
     /**
      * @brief 获取第一个页段
      */
-    reference front() noexcept;
+    Span & front() noexcept;
 
     /**
      * @brief 获取最后一个页段
      */
-    reference back() noexcept;
+    Span & back() noexcept;
 
     /**
      * @brief 获取链表头部
@@ -193,12 +193,12 @@ public:
     /**
      * @brief 将页段插入到头部
      */
-    void push_front(pointer span);
+    void push_front(Span * span);
 
     /**
      * @brief 将页段插入到尾部
      */
-    void push_back(pointer span);
+    void push_back(Span * span);
 
     /**
      * @brief 从头部删除页段
@@ -214,7 +214,7 @@ public:
      * @brief 删除指定页段
      * @param span 要删除的页段
      */
-    void erase(pointer span);
+    void erase(Span * span);
 
     /**
      * @brief 获取链表锁

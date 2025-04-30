@@ -8,22 +8,22 @@ FreeObject::FreeObject()
 {
 }
 
-FreeObject::FreeObject(FreeObject::pointer next)
+FreeObject::FreeObject(FreeObject * next)
     : _Next(next)
 {
 }
 
-FreeObject::pointer FreeObject::next() const noexcept
+FreeObject * FreeObject::next() const noexcept
 {
     return _Next;
 }
 
-void FreeObject::setNext(FreeObject::pointer next) noexcept
+void FreeObject::setNext(FreeObject * next) noexcept
 {
     _Next = next;
 }
 
-FreeListIterator::FreeListIterator(FreeListIterator::pointer free_object) noexcept
+FreeListIterator::FreeListIterator(FreeObject * free_object) noexcept
     : _Free_object(free_object)
 {
 }
@@ -38,12 +38,12 @@ bool FreeListIterator::operator!=(const FreeListIterator & other) const noexcept
     return _Free_object != other._Free_object;
 }
 
-FreeListIterator::pointer FreeListIterator::operator*() noexcept
+FreeObject * FreeListIterator::operator*() noexcept
 {
     return _Free_object;
 }
 
-FreeListIterator::pointer FreeListIterator::operator->() noexcept
+FreeObject * FreeListIterator::operator->() noexcept
 {
     return _Free_object;
 }
@@ -72,12 +72,12 @@ FreeList::~FreeList()
     delete _Head;
 }
 
-FreeList::pointer FreeList::front() noexcept
+FreeObject * FreeList::front() noexcept
 {
     return _Head->next();
 }
 
-void FreeList::push_front(FreeList::pointer free_object)
+void FreeList::push_front(FreeObject * free_object)
 {
     free_object->setNext(_Head->next());
     _Head->setNext(free_object);
@@ -105,7 +105,7 @@ bool FreeList::empty() const noexcept
     return (_Head->next() == nullptr);
 }
 
-FreeList::size_type FreeList::size() const noexcept
+FreeList::block_count FreeList::size() const noexcept
 {
     return _Size;
 }
