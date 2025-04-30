@@ -16,7 +16,7 @@ class Span
 public:
     using page_id = std::size_t;        // 页段号使用size_t存储
     using page_count = std::uint8_t;    // 页数范围为1-128，使用uint8_t存储
-    using used_type = std::uint16_t;    // 内存块数量范围为0-65535，使用uint16_t存储
+    using block_type = std::uint16_t;   // 内存块数量范围为0-65535，使用uint16_t存储
     using pointer = Span *;
     using reference = Span &;
 
@@ -26,7 +26,7 @@ private:
     pointer _Prev;                  // 前一个页段
     pointer _Next;                  // 后一个页段 
     page_count _Page_count;         // 页数
-    used_type _Used;                // 已使用的内存块数
+    block_type _Used;               // 已使用的内存块数
 
 public:
     Span();
@@ -77,12 +77,12 @@ public:
     /**
      * @brief 获取空闲内存块数量
      */
-    used_type used() const noexcept;
+    block_type used() const noexcept;
 
     /**
      * @brief 设置空闲内存块数量
      */
-    void setUsed(used_type used) noexcept;
+    void setUsed(block_type used) noexcept;
 };
 
 /**

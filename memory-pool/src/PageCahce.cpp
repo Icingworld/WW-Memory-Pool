@@ -4,6 +4,9 @@ namespace WW
 {
 
 PageCache::PageCache()
+    : _Spans()
+    , _Span_map()
+    , _Mutex()
 {
 }
 
@@ -17,13 +20,13 @@ PageCache & PageCache::getPageCache()
     return instance;
 }
 
-Span * PageCache::fetchSpan(std::size_t page_count)
+PageCache::pointer PageCache::fetchSpan(PageCache::page_count count)
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    std::lock_guard<std::recursive_mutex> lock(_Mutex);
 
     // 尝试从链表中直接获取页段
-    if (!spans[page_count - 1].empty()) {
-        Span * span = spans[page_count - 1].front();
+    if (!_Spans[count - 1].empty()) {
+        pointer span = _Spans[count - 1].front();
         spans[page_count - 1].pop_front();
         return span;
     }

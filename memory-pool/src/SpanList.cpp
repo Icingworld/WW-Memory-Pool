@@ -53,12 +53,12 @@ void Span::setNext(Span::pointer next) noexcept
     _Next = next;
 }
 
-Span::used_type Span::used() const noexcept
+Span::block_type Span::used() const noexcept
 {
     return _Used;
 }
 
-void Span::setUsed(Span::used_type used) noexcept
+void Span::setUsed(Span::block_type used) noexcept
 {
     _Used = used;
 }
@@ -116,6 +116,7 @@ SpanListIterator SpanListIterator::operator--(int) noexcept
 
 SpanList::SpanList()
     : _Head(new Span())
+    , _Mutex()
 {
     _Head->setNext(_Head);
     _Head->setPrev(_Head);
