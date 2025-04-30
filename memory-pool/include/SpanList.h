@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstddef>
 #include <mutex>
 
 #include <FreeList.h>
@@ -87,14 +86,74 @@ public:
 };
 
 /**
+ * @brief 页段链表迭代器
+ */
+class SpanListIterator
+{
+public:
+    using pointer = Span::pointer;
+    using reference = Span::reference;
+
+private:
+    pointer _Span;      // 页段指针
+
+public:
+    explicit SpanListIterator(pointer span) noexcept;
+
+    ~SpanListIterator() = default;
+
+public:
+    /**
+     * @brief 迭代器是否相等
+     */
+    bool operator==(const SpanListIterator & other) const noexcept;
+
+    /**
+     * @brief 迭代器是否不相等
+     */
+    bool operator!=(const SpanListIterator & other) const noexcept;
+
+    /**
+     * @brief 解引用迭代器
+     */
+    reference operator*() noexcept;
+
+    /**
+     * @brief 解引用迭代器
+     */
+    pointer operator->() noexcept;
+
+    /**
+     * @brief 向后移动
+     */
+    SpanListIterator & operator++() noexcept;
+
+    /**
+     * @brief 向后移动
+     */
+    SpanListIterator operator++(int) noexcept;
+
+    /**
+     * @brief 向前移动
+     */
+    SpanListIterator & operator--() noexcept;
+
+    /**
+     * @brief 向前移动
+     */
+    SpanListIterator operator--(int) noexcept;
+};
+
+/**
  * @brief 页段链表
  * @details 双向链表，持有一个互斥量，用于在中心缓存中的多线程访问
  */
 class SpanList
 {
 public:
-    using pointer = Span::pointer;
-    using reference = Span::reference;
+    using iterator = SpanListIterator;
+    using pointer = SpanListIterator::pointer;
+    using reference = SpanListIterator::reference;
 
 private:
     pointer _Head;                      // 虚拟头节点
@@ -119,12 +178,12 @@ public:
     /**
      * @brief 获取链表头部
      */
-    pointer begin() noexcept;
+    iterator begin() noexcept;
 
     /**
      * @brief 获取链表尾部
      */
-    pointer end() noexcept;
+    iterator end() noexcept;
 
     /**
      * @brief 页段链表是否为空

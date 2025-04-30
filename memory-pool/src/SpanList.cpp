@@ -63,6 +63,57 @@ void Span::setUsed(Span::used_type used) noexcept
     _Used = used;
 }
 
+SpanListIterator::SpanListIterator(SpanListIterator::pointer span) noexcept
+    : _Span(span)
+{
+}
+
+bool SpanListIterator::operator==(const SpanListIterator & other) const noexcept
+{
+    return _Span == other._Span;
+}
+
+bool SpanListIterator::operator!=(const SpanListIterator & other) const noexcept
+{
+    return _Span != other._Span;
+}
+
+SpanListIterator::reference SpanListIterator::operator*() noexcept
+{
+    return *_Span;
+}
+
+SpanListIterator::pointer SpanListIterator::operator->() noexcept
+{
+    return _Span;
+}
+
+SpanListIterator & SpanListIterator::operator++() noexcept
+{
+    _Span = _Span->next();
+    return *this;
+}
+
+SpanListIterator SpanListIterator::operator++(int) noexcept
+{
+    SpanListIterator _Tmp = *this;
+    ++*this;
+    return _Tmp;
+}
+
+SpanListIterator & SpanListIterator::operator--() noexcept
+{
+    _Span = _Span->prev();
+    return *this;
+}
+
+SpanListIterator SpanListIterator::operator--(int) noexcept
+{
+    SpanListIterator _Tmp = *this;
+    --*this;
+    return _Tmp;
+}
+
 SpanList::SpanList()
     : _Head(new Span())
 {
@@ -85,14 +136,14 @@ SpanList::reference SpanList::back() noexcept
     return *_Head->prev();
 }
 
-SpanList::pointer SpanList::begin() noexcept
+SpanList::iterator SpanList::begin() noexcept
 {
-    return _Head->next();
+    return iterator(_Head->next());
 }
 
-SpanList::pointer SpanList::end() noexcept
+SpanList::iterator SpanList::end() noexcept
 {
-    return _Head;
+    return iterator(_Head);
 }
 
 void SpanList::push_front(SpanList::pointer span)
