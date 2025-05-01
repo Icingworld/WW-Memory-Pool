@@ -5,14 +5,19 @@
 namespace WW
 {
 
+constexpr std::size_t MAX_ARRAY_SIZE = 208;     // 内存大小数组最大大小
+
 /**
  * @brief 中心缓存
  */
 class CentralCache
 {
+public:
+    using size_type = std::size_t;
+
 private:
-    PageCache & page_cache;                 // 页缓存
-    std::array<SpanList, 208> spans;        // 页段链表数组
+    PageCache & _Page_cache;                        // 页缓存
+    std::array<SpanList, MAX_ARRAY_SIZE> _Spans;    // 页段链表数组
 
 private:
     CentralCache();
@@ -22,7 +27,7 @@ private:
     CentralCache & operator=(const CentralCache &) = delete;
 
 public:
-    ~CentralCache();
+    ~CentralCache() = default;
 
 public:
     /**
@@ -32,30 +37,31 @@ public:
 
     /**
      * @brief 获取指定大小的空闲内存块
-     * @param index 索引
+     * @param size 内存块大小
      * @param count 个数
-     * @return 空闲内存块链表
+     * @return 成功时返回`FreeObject *`，失败时返回`nullptr`
      */
-    FreeObject * fetchRange(std::size_t index, std::size_t count);
+    FreeObject * fetchRange(size_type size, size_type count);
 
     /**
      * @brief 将空闲内存块归还到中心缓存
      * @param index 索引
      * @param free_object 空闲内存块链表
      */
-    void returnRange(std::size_t index, FreeObject * free_object);
+    void returnRange(size_type size, FreeObject * free_object);
 
 private:
     /**
-     * @brief 索引转换为块大小
+     * @brief 内存块大小转换为数组索引
      */
-    std::size_t indexToSize(std::size_t index) const noexcept;
+    static size_type sizeToIndex(size_type size) noexcept;
 
     /**
      * @brief 从自由表中获取一个空闲的页段
      * @param index 索引
+     * @return 成功时返回`Span *`，失败时返回`nullptr`
      */
-    Span * getFreeSpan(std::size_t index);
+    Span * getFreeSpan(size_type index);
 };
 
 } // namespace WW

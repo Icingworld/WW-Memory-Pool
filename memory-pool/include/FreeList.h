@@ -85,12 +85,12 @@ public:
 class FreeList
 {
 public:
-    using block_count = std::uint16_t;      // 内存块数量范围为0-65535，使用uint16_t存储
+    using size_type = std::size_t;          // 内存块数量范围为0-65535，使用uint16_t存储
     using iterator = FreeListIterator;
 
 private:
     FreeObject * _Head;         // 虚拟头节点
-    block_count _Size;          // 空闲内存块数量
+    size_type _Size;            // 空闲内存块数量
 
 public:
     FreeList();
@@ -131,7 +131,7 @@ public:
     /**
      * @brief 获取空闲内存块数量
      */
-    block_count size() const noexcept;
+    size_type size() const noexcept;
 };
 
 } // namespace WW

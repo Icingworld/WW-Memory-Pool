@@ -12,6 +12,7 @@ PageCache::PageCache()
 
 PageCache::~PageCache()
 {
+    // TODO
 }
 
 PageCache & PageCache::getPageCache()
@@ -20,7 +21,7 @@ PageCache & PageCache::getPageCache()
     return instance;
 }
 
-Span * PageCache::fetchSpan(page_count count)
+Span * PageCache::fetchSpan(size_type count)
 {
     std::lock_guard<std::recursive_mutex> lock(_Mutex);
 
@@ -32,7 +33,7 @@ Span * PageCache::fetchSpan(page_count count)
     }
 
     // 没有正好这么大的页段，尝试从更大块内存中切出页段
-    for (page_count i = count; i < MAX_PAGE_COUNT; ++i) {
+    for (size_type i = count; i < MAX_PAGE_COUNT; ++i) {
         if (!_Spans[i].empty()) {
             // 取出页段
             Span & bigger_span = _Spans[i].front();
@@ -95,7 +96,7 @@ void PageCache::returnSpan(Span * span)
         }
 
         // 寻找上一个页段的尾页号
-        page_id page_id_prev = span->id() - 1;
+        size_type page_id_prev = span->id() - 1;
         auto it = _Span_map.find(page_id_prev);
         if (it == _Span_map.end() || it->second->used() != 0) {
             // 没找到页，或者找到了但正在使用
@@ -124,7 +125,7 @@ void PageCache::returnSpan(Span * span)
     // 向后寻找空闲的页
     while (true) {
         // 寻找下一个页段的首页号
-        page_id page_id_next = span->id() + span->count();
+        size_type page_id_next = span->id() + span->count();
         auto it = _Span_map.find(page_id_next);
         if (it == _Span_map.end() || it->second->used() != 0) {
             // 没找到页，或者找到了但正在使用
@@ -159,7 +160,7 @@ void PageCache::returnSpan(Span * span)
 
 Span * PageCache::FreeObjectToSpan(void * ptr)
 {
-    page_id id = Span::ptrToId(ptr);
+    size_type id = Span::ptrToId(ptr);
 
     std::lock_guard<std::recursive_mutex> lock(_Mutex);
     auto it = _Span_map.find(id);
@@ -170,7 +171,7 @@ Span * PageCache::FreeObjectToSpan(void * ptr)
     return it->second;
 }
 
-void * PageCache::fetchFromSystem(block_count count) const noexcept
+void * PageCache::fetchFromSystem(size_type count) const noexcept
 {
     return ::operator new(count * PAGE_SIZE, std::nothrow);
 }

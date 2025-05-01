@@ -105,7 +105,7 @@ bool FreeList::empty() const noexcept
     return (_Head->next() == nullptr);
 }
 
-FreeList::block_count FreeList::size() const noexcept
+FreeList::size_type FreeList::size() const noexcept
 {
     return _Size;
 }

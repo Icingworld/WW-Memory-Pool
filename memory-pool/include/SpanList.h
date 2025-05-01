@@ -17,17 +17,15 @@ constexpr std::size_t PAGE_SHIFT = 12;          // 页号计算移位数
 class Span
 {
 public:
-    using page_id = std::size_t;        // 页段号使用size_t存储
-    using page_count = std::uint8_t;    // 页数范围为1-128，使用uint8_t存储
-    using block_count = std::uint16_t;  // 内存块数量范围为0-65535，使用uint16_t存储
+    using size_type = std::size_t;
 
 private:
     FreeList _Free_list;            // 空闲内存块
-    page_id _Page_id;               // 页段号
+    size_type _Page_id;              // 页段号
     Span * _Prev;                   // 前一个页段
     Span * _Next;                   // 后一个页段 
-    page_count _Page_count;         // 页数
-    block_count _Used;              // 已使用的内存块数
+    size_type _Page_count;          // 页数
+    size_type _Used;                // 已使用的内存块数
 
 public:
     Span();
@@ -38,22 +36,22 @@ public:
     /**
      * @brief 获取页号
      */
-    page_id id() const noexcept;
+    size_type id() const noexcept;
 
     /**
      * @brief 设置页号
      */
-    void setId(page_id id) noexcept;
+    void setId(size_type id) noexcept;
 
     /**
      * @brief 获取页数
      */
-    page_count count() const noexcept;
+    size_type count() const noexcept;
 
     /**
      * @brief 设置页数
      */
-    void setCount(page_count count) noexcept;
+    void setCount(size_type count) noexcept;
 
     /**
      * @brief 获取上一个页段
@@ -78,17 +76,27 @@ public:
     /**
      * @brief 获取空闲内存块数量
      */
-    block_count used() const noexcept;
+    size_type used() const noexcept;
 
     /**
      * @brief 设置空闲内存块数量
      */
-    void setUsed(block_count used) noexcept;
+    void setUsed(size_type used) noexcept;
+
+    /**
+     * @brief 获取空闲内存块链表
+     */
+    FreeList * getFreeList() noexcept;
 
     /**
      * @brief 将内存地址转为页号
      */
-    static page_id ptrToId(void * ptr) noexcept;
+    static size_type ptrToId(void * ptr) noexcept;
+
+    /**
+     * @brief 将内存地址转为页号
+     */
+    static void * idToPtr(size_type id) noexcept;
 };
 
 /**

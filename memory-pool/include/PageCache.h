@@ -16,13 +16,11 @@ constexpr std::uint8_t MAX_PAGE_COUNT = 128;    // 最大页数
 class PageCache
 {
 public:
-    using page_id = std::size_t;            // 页号类型
-    using block_count = std::uint16_t;      // 内存块数量类型
-    using page_count = std::uint8_t;        // 页数类型
+    using size_type = std::size_t;
 
 private:
     std::array<SpanList, MAX_PAGE_COUNT> _Spans;        // 页段链表数组
-    std::unordered_map<page_id, Span *> _Span_map;      // 页号到页段指针的映射
+    std::unordered_map<size_type, Span *> _Span_map;    // 页号到页段指针的映射
     std::recursive_mutex _Mutex;                        // 页缓存锁
 
 private:
@@ -46,7 +44,7 @@ public:
      * @param count 页数
      * @return 成功时返回`Span *`，失败时返回`nullptr`
      */
-    Span * fetchSpan(page_count count);
+    Span * fetchSpan(size_type count);
 
     /**
      * @brief 将页段归还到页缓存
@@ -65,7 +63,7 @@ private:
     /**
      * @brief 从系统内存中获取指定大小的内存
      */
-    void * fetchFromSystem(block_count count) const noexcept;
+    void * fetchFromSystem(size_type count) const noexcept;
 };
 
 } // namespace WW
