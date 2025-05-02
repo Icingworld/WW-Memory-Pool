@@ -4,93 +4,206 @@ namespace WW
 {
 
 Span::Span()
-    : page_id(0)
-    , page_count(0)
-    , prev(nullptr)
-    , next(nullptr)
-    , freelist()
-    , used(0)
+    : _Free_list()
+    , _Page_id(0)
+    , _Prev(nullptr)
+    , _Next(nullptr)
+    , _Page_count(0)
+    , _Used(0)
 {
 }
 
-Span::~Span()
+Span::size_type Span::id() const noexcept
 {
+    return _Page_id;
+}
+
+void Span::setId(size_type page_id) noexcept
+{
+    _Page_id = page_id;
+}
+
+Span::size_type Span::count() const noexcept
+{
+    return _Page_count;
+}
+
+void Span::setCount(size_type count) noexcept
+{
+    _Page_count = count;
+}
+
+Span * Span::prev() const noexcept
+{
+    return _Prev;
+}
+
+void Span::setPrev(Span * prev) noexcept
+{
+    _Prev = prev;
+}
+
+Span * Span::next() const noexcept
+{
+    return _Next;
+}
+
+void Span::setNext(Span * next) noexcept
+{
+    _Next = next;
+}
+
+Span::size_type Span::used() const noexcept
+{
+    return _Used;
+}
+
+void Span::setUsed(size_type used) noexcept
+{
+    _Used = used;
+}
+
+FreeList * Span::getFreeList() noexcept
+{
+    return &_Free_list;
+}
+
+Span::size_type Span::ptrToId(void * ptr) noexcept
+{
+    return reinterpret_cast<std::uintptr_t>(ptr) >> PAGE_SHIFT;
+}
+
+void * Span::idToPtr(size_type id) noexcept
+{
+    return reinterpret_cast<void *>(id << PAGE_SHIFT);
+}
+
+SpanListIterator::SpanListIterator(Span * span) noexcept
+    : _Span(span)
+{
+}
+
+bool SpanListIterator::operator==(const SpanListIterator & other) const noexcept
+{
+    return _Span == other._Span;
+}
+
+bool SpanListIterator::operator!=(const SpanListIterator & other) const noexcept
+{
+    return _Span != other._Span;
+}
+
+Span & SpanListIterator::operator*() noexcept
+{
+    return *_Span;
+}
+
+Span * SpanListIterator::operator->() noexcept
+{
+    return _Span;
+}
+
+SpanListIterator & SpanListIterator::operator++() noexcept
+{
+    _Span = _Span->next();
+    return *this;
+}
+
+SpanListIterator SpanListIterator::operator++(int) noexcept
+{
+    SpanListIterator _Tmp = *this;
+    ++*this;
+    return _Tmp;
+}
+
+SpanListIterator & SpanListIterator::operator--() noexcept
+{
+    _Span = _Span->prev();
+    return *this;
+}
+
+SpanListIterator SpanListIterator::operator--(int) noexcept
+{
+    SpanListIterator _Tmp = *this;
+    --*this;
+    return _Tmp;
 }
 
 SpanList::SpanList()
-    : head(new Span())
+    : _Head(new Span())
+    , _Mutex()
 {
-    head->prev = head;
-    head->next = head;
+    _Head->setNext(_Head);
+    _Head->setPrev(_Head);
 }
 
 SpanList::~SpanList()
 {
-    delete head;
+    delete _Head;
 }
 
-Span * SpanList::front() const noexcept
+Span & SpanList::front() noexcept
 {
-    return head->next;
+    return *_Head->next();
 }
 
-Span * SpanList::back() const noexcept
+Span & SpanList::back() noexcept
 {
-    return head->prev;
+    return *_Head->prev();
 }
 
-Span * SpanList::begin() const noexcept
+SpanList::iterator SpanList::begin() noexcept
 {
-    return head->next;
+    return iterator(_Head->next());
 }
 
-Span * SpanList::end() const noexcept
+SpanList::iterator SpanList::end() noexcept
 {
-    return head;
+    return iterator(_Head);
 }
 
 void SpanList::push_front(Span * span)
 {
-    span->next = head->next;
-    span->prev = head;
-    head->next->prev = span;
-    head->next = span;
+    span->setNext(_Head->next());
+    span->setPrev(_Head);
+    _Head->next()->setPrev(span);
+    _Head->setNext(span);
 }
 
 void SpanList::push_back(Span * span)
 {
-    span->next = head;
-    span->prev = head->prev;
-    head->prev->next = span;
-    head->prev = span;
+    span->setNext(_Head);
+    span->setPrev(_Head->prev());
+    _Head->prev()->setNext(span);
+    _Head->setPrev(span);
 }
 
 void SpanList::pop_front()
 {
-    head->next = head->next->next;
-    head->next->prev = head;
+    _Head->setNext(_Head->next()->next());
+    _Head->next()->setPrev(_Head);
 }
 
 void SpanList::pop_back()
 {
-    head->prev = head->prev->prev;
-    head->prev->next = head;
+    _Head->setPrev(_Head->prev()->prev());
+    _Head->prev()->setNext(_Head);
 }
 
 void SpanList::erase(Span * span)
 {
-    span->prev->next = span->next;
-    span->next->prev = span->prev;
+    span->prev()->setNext(span->next());
+    span->next()->setPrev(span->prev());
 }
 
 bool SpanList::empty() const noexcept
 {
-    return head->next == head;
+    return (_Head->next() == _Head);
 }
 
-std::recursive_mutex & SpanList::get_mutex()
+std::recursive_mutex & SpanList::getMutex()
 {
-    return mutex;
+    return _Mutex;
 }
 
 } // namespace WW

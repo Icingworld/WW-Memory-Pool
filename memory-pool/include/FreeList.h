@@ -10,34 +10,98 @@ namespace WW
  */
 class FreeObject
 {
-public:
-    FreeObject * next;  // 下一个空闲内存块
+private:
+    FreeObject * _Next;  // 下一个空闲内存块
 
 public:
     FreeObject();
 
     explicit FreeObject(FreeObject * next);
 
-    ~FreeObject();
+    ~FreeObject() = default;
+
+public:
+    /**
+     * @brief 获取下一个空闲内存块
+     */
+    FreeObject * next() const noexcept;
+
+    /**
+     * @brief 设置下一个空闲内存块
+     */
+    void setNext(FreeObject * next) noexcept;
+};
+
+/**
+ * @brief 空闲内存块链表迭代器
+ */
+class FreeListIterator
+{
+private:
+    FreeObject * _Free_object;       // 空闲内存块指针
+
+public:
+    explicit FreeListIterator(FreeObject * free_object) noexcept;
+
+    ~FreeListIterator() = default;
+
+public:
+    /**
+     * @brief 迭代器是否相等
+     */
+    bool operator==(const FreeListIterator & other) const noexcept;
+
+    /**
+     * @brief 迭代器是否不相等
+     */
+    bool operator!=(const FreeListIterator & other) const noexcept;
+
+    /**
+     * @brief 解引用迭代器
+     * @details 对于内存块，解引用直接返回内存块地址
+     */
+    FreeObject * operator*() noexcept;
+
+    /**
+     * @brief 解引用迭代器
+     */
+    FreeObject * operator->() noexcept;
+
+    /**
+     * @brief 向后移动
+     */
+    FreeListIterator & operator++() noexcept;
+
+    /**
+     * @brief 向后移动
+     */
+    FreeListIterator operator++(int) noexcept;
 };
 
 /**
  * @brief 空闲内存块链表
+ * @details 单向链表
  */
 class FreeList
 {
+public:
+    using size_type = std::size_t;          // 内存块数量范围为0-65535，使用uint16_t存储
+    using iterator = FreeListIterator;
+
 private:
-    FreeObject * head;      // 链表头部，不是虚拟节点
-    std::size_t freesize;   // 空闲内存块数量
+    FreeObject * _Head;         // 虚拟头节点
+    size_type _Size;            // 空闲内存块数量
 
 public:
     FreeList();
+
+    ~FreeList();
 
 public:
     /**
      * @brief 获取链表头部元素
      */
-    FreeObject * front() const noexcept;
+    FreeObject * front() noexcept;
 
     /**
      * @brief 将空闲内存块插入到链表头部
@@ -45,9 +109,19 @@ public:
     void push_front(FreeObject * free_object);
 
     /**
-     * @brief 从链表头部取出空闲内存块
+     * @brief 从链表头部移除内存块
      */
     void pop_front();
+
+    /**
+     * @brief 获取链表头部
+     */
+    iterator begin() noexcept;
+
+    /**
+     * @brief 获取链表尾部
+     */
+    iterator end() noexcept;
 
     /**
      * @brief 链表是否为空
@@ -55,14 +129,9 @@ public:
     bool empty() const noexcept;
 
     /**
-     * @brief 清空链表
-     */
-    void clear();
-
-    /**
      * @brief 获取空闲内存块数量
      */
-    std::size_t size() const noexcept;
+    size_type size() const noexcept;
 };
 
 } // namespace WW

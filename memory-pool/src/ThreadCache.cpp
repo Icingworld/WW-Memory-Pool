@@ -4,16 +4,16 @@ namespace WW
 {
 
 ThreadCache::ThreadCache()
-    : central_cache(CentralCache::getCentralCache())
+    : _Central_cache(CentralCache::getCentralCache())
 {
 }
 
 ThreadCache::~ThreadCache()
 {
     // 归还所有内存块
-    for (std::size_t i = 0; i < freelists.size(); ++i) {
-        if (!freelists[i].empty()) {
-            returnToCentralCache(i, freelists[i].size());
+    for (size_type i = 0; i < _Freelists.size(); ++i) {
+        if (!_Freelists[i].empty()) {
+            returnToCentralCache(i, _Freelists[i].size());
         }
     }
 }
@@ -24,52 +24,52 @@ ThreadCache & ThreadCache::getThreadCache()
     return threadCache;
 }
 
-void * ThreadCache::allocate(std::size_t size)
+void * ThreadCache::allocate(size_type size) noexcept
 {
     if (size == 0) {
         return nullptr;
     }
 
-    if (size > 1024 * 256) {
-        // 直接从堆获取
+    if (size > MAX_MEMORY_SIZE) {
+        // 超出管理范围，直接从堆获取
         return ::operator new(size, std::nothrow);
     }
 
     // 获取对齐后的大小
-    std::size_t round_size = roundUp(size);
+    size_type round_size = roundUp(size);
     // 找到所在的索引
-    std::size_t index = sizeToIndex(round_size);
+    size_type index = sizeToIndex(round_size);
 
-    if (freelists[index].empty()) {
+    if (_Freelists[index].empty()) {
         // 没有这种内存块，需要申请
-        fetchFromCentralCache(index);
+        fetchFromCentralCache(round_size);
     }
 
     // 有这种内存块，取一个出来
-    FreeObject * obj = freelists[index].front();
-    freelists[index].pop_front();
+    FreeObject * obj = _Freelists[index].front();
+    _Freelists[index].pop_front();
     return reinterpret_cast<void *>(obj);
 }
 
-void ThreadCache::deallocate(void * ptr, std::size_t size)
+void ThreadCache::deallocate(void * ptr, size_type size) noexcept
 {
     if (size == 0) {
         return;
     }
 
-    if (size > 1024 * 256) {
+    if (size > MAX_MEMORY_SIZE) {
         // 从系统释放
-        ::operator delete(ptr);
+        ::operator delete(ptr, std::nothrow);
         return;
     }
 
     // 获取对齐后的大小
-    std::size_t round_size = roundUp(size);
+    size_type round_size = roundUp(size);
     // 找到所在的索引
-    std::size_t index = sizeToIndex(round_size);
+    size_type index = sizeToIndex(round_size);
     // 把内存插入自由表
     FreeObject * obj = reinterpret_cast<FreeObject *>(ptr);
-    freelists[index].push_front(obj);
+    _Freelists[index].push_front(obj);
 
     // 检查是否需要归还给中心缓存
     if (shouldReturn(index)) {
@@ -77,7 +77,7 @@ void ThreadCache::deallocate(void * ptr, std::size_t size)
     }
 }
 
-std::size_t ThreadCache::roundUp(std::size_t size) const noexcept
+ThreadCache::size_type ThreadCache::roundUp(size_type size) const noexcept
 {
     if (size <= 128) {
         return (size + 8 - 1) & ~(8 - 1);
@@ -92,7 +92,7 @@ std::size_t ThreadCache::roundUp(std::size_t size) const noexcept
     }
 }
 
-std::size_t ThreadCache::sizeToIndex(std::size_t size) const noexcept
+ThreadCache::size_type ThreadCache::sizeToIndex(size_type size) const noexcept
 {
     if (size <= 128) {
         return (size + 8 - 1) / 8 - 1;
@@ -109,43 +109,41 @@ std::size_t ThreadCache::sizeToIndex(std::size_t size) const noexcept
     }
 }
 
-bool ThreadCache::shouldReturn(std::size_t index) const noexcept
+bool ThreadCache::shouldReturn(size_type index) const noexcept
 {
     // 后续进行动态扩展
-    if (freelists[index].size() >= 20) {
+    if (_Freelists[index].size() >= 20) {
         return true;
     }
 
     return false;
 }
 
-void ThreadCache::fetchFromCentralCache(std::size_t index)
+void ThreadCache::fetchFromCentralCache(size_type size) noexcept
 {
     // 一次获取20个，后续扩展
-    FreeObject * obj = central_cache.fetchRange(index, 20);
+    FreeObject * obj = _Central_cache.fetchRange(size, 20);
     FreeObject * cur = obj;
+    size_type index = sizeToIndex(size);
     while (cur != nullptr) {
-        FreeObject * next = cur->next;
-        freelists[index].push_front(cur);
+        FreeObject * next = cur->next();
+        _Freelists[index].push_front(cur);
         cur = next;
     }
 }
 
-void ThreadCache::returnToCentralCache(std::size_t index, std::size_t nums)
+void ThreadCache::returnToCentralCache(size_type index, size_type nums) noexcept
 {
-    // 归还nums个，后续扩展
-    FreeObject * obj = freelists[index].front();
-    freelists[index].pop_front();
-    FreeObject * cur = obj;
-
-    for (std::size_t count = 1; count < nums; ++count) {
-        FreeObject * next = freelists[index].front();
-        freelists[index].pop_front();
-        cur->next = next;
-        cur = next;
+    // 取出nums个内存块组成链表
+    FreeObject * head = nullptr;
+    for (size_type i = 0; i < nums; ++i) {
+        FreeObject * obj = _Freelists[index].front();
+        _Freelists[index].pop_front();
+        obj->setNext(head);
+        head = obj;
     }
 
-    central_cache.returnRange(index, obj);
+    _Central_cache.returnRange(index, head);
 }
 
 } // namespace WW

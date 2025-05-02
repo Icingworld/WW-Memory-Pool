@@ -5,14 +5,19 @@
 namespace WW
 {
 
+constexpr std::size_t MAX_MEMORY_SIZE = PAGE_SIZE * MAX_PAGE_COUNT;    // 内存池可以管理的最大内存
+
 /**
  * @brief 线程缓存
  */
 class ThreadCache
 {
+public:
+    using size_type = std::size_t;
+
 private:
-    CentralCache & central_cache;               // 中心缓存
-    std::array<FreeList, 208> freelists;        // 自由表数组
+    CentralCache & _Central_cache;                      // 中心缓存
+    std::array<FreeList, MAX_ARRAY_SIZE> _Freelists;    // 自由表数组
 
 private:
     ThreadCache();
@@ -33,41 +38,44 @@ public:
     /**
      * @brief 申请内存
      * @param size 内存大小
+     * @return 成功返回`void *`，失败返回`nullptr`
      */
-    void * allocate(std::size_t size);
+    void * allocate(size_type size) noexcept;
 
     /**
      * @brief 回收内存
      * @param ptr 内存指针
      * @param size 内存大小
      */
-    void deallocate(void * ptr, std::size_t size);
+    void deallocate(void * ptr, size_type size) noexcept;
 
 private:
     /**
      * @brief 将内存大小向上取整
      */
-    std::size_t roundUp(std::size_t size) const noexcept;
+    size_type roundUp(size_type size) const noexcept;
 
     /**
      * @brief 将大小转换为索引
      */
-    std::size_t sizeToIndex(std::size_t size) const noexcept;
+    size_type sizeToIndex(size_type size) const noexcept;
 
     /**
      * @brief 判断是否需要归还给中心缓存
      */
-    bool shouldReturn(std::size_t index)  const noexcept;
+    bool shouldReturn(size_type index)  const noexcept;
 
     /**
      * @brief 从中心缓存获取一批内存块
      */
-    void fetchFromCentralCache(std::size_t index);
+    void fetchFromCentralCache(size_type size) noexcept;
 
     /**
      * @brief 将一批内存块还给中心缓存
+     * @param index 归还内存所在的索引
+     * @param nums 归还的内存数量
      */
-    void returnToCentralCache(std::size_t index, std::size_t nums);
+    void returnToCentralCache(size_type index, size_type nums) noexcept;
 };
     
 } // namespace WW

@@ -4,56 +4,110 @@ namespace WW
 {
 
 FreeObject::FreeObject()
-    : next(nullptr)
+    : _Next(nullptr)
 {
 }
 
 FreeObject::FreeObject(FreeObject * next)
-    : next(next)
+    : _Next(next)
 {
 }
 
-FreeObject::~FreeObject()
+FreeObject * FreeObject::next() const noexcept
 {
+    return _Next;
+}
+
+void FreeObject::setNext(FreeObject * next) noexcept
+{
+    _Next = next;
+}
+
+FreeListIterator::FreeListIterator(FreeObject * free_object) noexcept
+    : _Free_object(free_object)
+{
+}
+
+bool FreeListIterator::operator==(const FreeListIterator & other) const noexcept
+{
+    return _Free_object == other._Free_object;
+}
+
+bool FreeListIterator::operator!=(const FreeListIterator & other) const noexcept
+{
+    return _Free_object != other._Free_object;
+}
+
+FreeObject * FreeListIterator::operator*() noexcept
+{
+    return _Free_object;
+}
+
+FreeObject * FreeListIterator::operator->() noexcept
+{
+    return _Free_object;
+}
+
+FreeListIterator & FreeListIterator::operator++() noexcept
+{
+    _Free_object = _Free_object->next();
+    return *this;
+}
+
+FreeListIterator FreeListIterator::operator++(int) noexcept
+{
+    FreeListIterator _Tmp = *this;
+    ++*this;
+    return _Tmp;
 }
 
 FreeList::FreeList()
-    : head(nullptr)
-    , freesize(0)
+    : _Head(new FreeObject())
+    , _Size(0)
 {
 }
 
-FreeObject * FreeList::front() const noexcept
+FreeList::~FreeList()
 {
-    return head;
+    delete _Head;
+}
+
+FreeObject * FreeList::front() noexcept
+{
+    return _Head->next();
 }
 
 void FreeList::push_front(FreeObject * free_object)
 {
-    free_object->next = head;
-    head = free_object;
-    ++freesize;
+    free_object->setNext(_Head->next());
+    _Head->setNext(free_object);
+    ++_Size;
 }
 
 void FreeList::pop_front()
 {
-    head = head->next;
-    --freesize;
+    _Head->setNext(_Head->next()->next());
+    --_Size;
+}
+
+FreeList::iterator FreeList::begin() noexcept
+{
+    return iterator(_Head->next());
+}
+
+FreeList::iterator FreeList::end() noexcept
+{
+    return iterator(nullptr);
 }
 
 bool FreeList::empty() const noexcept
 {
-    return head == nullptr;
+    return (_Head->next() == nullptr);
 }
 
-void FreeList::clear()
+FreeList::size_type FreeList::size() const noexcept
 {
-    head = nullptr;
-}
-
-std::size_t FreeList::size() const noexcept
-{
-    return freesize;
+    return _Size;
 }
 
 } // namespace WW
