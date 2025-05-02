@@ -13,7 +13,7 @@ Span::Span()
 {
 }
 
-Span::size_type Span::id() const noexcept
+size_type Span::id() const noexcept
 {
     return _Page_id;
 }
@@ -23,7 +23,7 @@ void Span::setId(size_type page_id) noexcept
     _Page_id = page_id;
 }
 
-Span::size_type Span::count() const noexcept
+size_type Span::count() const noexcept
 {
     return _Page_count;
 }
@@ -53,7 +53,7 @@ void Span::setNext(Span * next) noexcept
     _Next = next;
 }
 
-Span::size_type Span::used() const noexcept
+size_type Span::used() const noexcept
 {
     return _Used;
 }
@@ -68,7 +68,7 @@ FreeList * Span::getFreeList() noexcept
     return &_Free_list;
 }
 
-Span::size_type Span::ptrToId(void * ptr) noexcept
+size_type Span::ptrToId(void * ptr) noexcept
 {
     return reinterpret_cast<std::uintptr_t>(ptr) >> PAGE_SHIFT;
 }

@@ -5,16 +5,11 @@
 namespace WW
 {
 
-constexpr std::size_t MAX_ARRAY_SIZE = 208;     // 内存大小数组最大大小
-
 /**
  * @brief 中心缓存
  */
 class CentralCache
 {
-public:
-    using size_type = std::size_t;
-
 private:
     PageCache & _Page_cache;                        // 页缓存
     std::array<SpanList, MAX_ARRAY_SIZE> _Spans;    // 页段链表数组

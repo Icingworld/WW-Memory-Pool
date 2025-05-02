@@ -77,7 +77,7 @@ void ThreadCache::deallocate(void * ptr, size_type size) noexcept
     }
 }
 
-ThreadCache::size_type ThreadCache::roundUp(size_type size) const noexcept
+size_type ThreadCache::roundUp(size_type size) const noexcept
 {
     if (size <= 128) {
         return (size + 8 - 1) & ~(8 - 1);
@@ -92,7 +92,7 @@ ThreadCache::size_type ThreadCache::roundUp(size_type size) const noexcept
     }
 }
 
-ThreadCache::size_type ThreadCache::sizeToIndex(size_type size) const noexcept
+size_type ThreadCache::sizeToIndex(size_type size) const noexcept
 {
     if (size <= 128) {
         return (size + 8 - 1) / 8 - 1;

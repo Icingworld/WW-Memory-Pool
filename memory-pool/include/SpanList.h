@@ -7,21 +7,15 @@
 namespace WW
 {
 
-constexpr std::size_t PAGE_SIZE = 4096;         // 单页大小
-constexpr std::size_t PAGE_SHIFT = 12;          // 页号计算移位数
-
 /**
  * @brief 页段
  * @details 维护一大段连续的内存
  */
 class Span
 {
-public:
-    using size_type = std::size_t;
-
 private:
     FreeList _Free_list;            // 空闲内存块
-    size_type _Page_id;              // 页段号
+    size_type _Page_id;             // 页段号
     Span * _Prev;                   // 前一个页段
     Span * _Next;                   // 后一个页段 
     size_type _Page_count;          // 页数

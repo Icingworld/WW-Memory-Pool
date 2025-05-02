@@ -33,7 +33,7 @@ Span * PageCache::fetchSpan(size_type count)
     }
 
     // 没有正好这么大的页段，尝试从更大块内存中切出页段
-    for (size_type i = count; i < MAX_PAGE_COUNT; ++i) {
+    for (size_type i = count; i < MAX_PAGE_NUM; ++i) {
         if (!_Spans[i].empty()) {
             // 取出页段
             Span & bigger_span = _Spans[i].front();
@@ -67,16 +67,16 @@ Span * PageCache::fetchSpan(size_type count)
 
     // 没找到更大的页段，直接申请一个最大的页段，然后按照上面的流程重新获取页段
     Span * max_span = new Span();
-    void * ptr = fetchFromSystem(MAX_PAGE_COUNT);
+    void * ptr = fetchFromSystem(MAX_PAGE_NUM);
     if (ptr == nullptr) {
         return nullptr;
     }
     
     // 计算页号
     max_span->setId(Span::ptrToId(ptr));
-    max_span->setCount(MAX_PAGE_COUNT);
-    // 插入MAX_PAGE_COUNT页的链表中
-    _Spans[MAX_PAGE_COUNT - 1].push_front(max_span);
+    max_span->setCount(MAX_PAGE_NUM);
+    // 插入MAX_PAGE_NUM页的链表中
+    _Spans[MAX_PAGE_NUM - 1].push_front(max_span);
     // 首页号插入哈希表
     _Span_map[max_span->id()] = max_span;
     // 尾页号插入哈希表
@@ -104,7 +104,7 @@ void PageCache::returnSpan(Span * span)
         }
 
         // 判断合并后是否超出上限
-        if (span->count() + it->second->count() > MAX_PAGE_COUNT) {
+        if (span->count() + it->second->count() > MAX_PAGE_NUM) {
             break;
         }
 
@@ -133,7 +133,7 @@ void PageCache::returnSpan(Span * span)
         }
 
         // 判断合并后是否超出上限
-        if (span->count() + it->second->count() > MAX_PAGE_COUNT) {
+        if (span->count() + it->second->count() > MAX_PAGE_NUM) {
             break;
         }
 

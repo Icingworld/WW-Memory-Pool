@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstddef>
+#include <Common.h>
 
 namespace WW
 {
@@ -85,7 +85,7 @@ public:
 class FreeList
 {
 public:
-    using size_type = std::size_t;          // 内存块数量范围为0-65535，使用uint16_t存储
+    using size_type = std::size_t;
     using iterator = FreeListIterator;
 
 private:

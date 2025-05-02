@@ -82,7 +82,7 @@ void CentralCache::returnRange(size_type size, FreeObject * free_object)
     }
 }
 
-CentralCache::size_type CentralCache::sizeToIndex(size_type size) noexcept
+size_type CentralCache::sizeToIndex(size_type size) noexcept
 {
     if (size <= 128) {
         return (size + 8 - 1) / 8 - 1;
@@ -123,12 +123,12 @@ Span * CentralCache::getFreeSpan(size_type size)
     // 初步计算需要多少页
     std::size_t page_count = total_size / PAGE_SIZE;
     // 如果还有剩余内存，则需要申请额外的一页
-    if (total_size % MAX_PAGE_COUNT != 0) {
+    if (total_size % MAX_PAGE_NUM != 0) {
         page_count += 1;
     }
     // 每个页段最多只有128页
-    if (page_count > MAX_PAGE_COUNT) {
-        page_count = MAX_PAGE_COUNT;
+    if (page_count > MAX_PAGE_NUM) {
+        page_count = MAX_PAGE_NUM;
     }
 
     // 申请页段
