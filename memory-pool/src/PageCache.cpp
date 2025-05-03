@@ -1,5 +1,7 @@
 #include "PageCache.h"
 
+#include <cstdlib>
+
 namespace WW
 {
 
@@ -14,10 +16,16 @@ PageCache::~PageCache()
 {
     // 释放所有页段
     for (size_type i = 0; i < MAX_PAGE_NUM; ++i) {
-        if (!_Spans[i].empty()) {
+        while (!_Spans[i].empty()) {
             Span & span = _Spans[i].front();
             _Spans[i].pop_front();
-            ::operator delete(&span);
+
+            // 释放页段管理的内存空间
+            void * ptr = Span::idToPtr(span.id());
+            ::operator delete(ptr);
+
+            // 销毁页段
+            delete(&span);
         }
     }
 }
@@ -180,7 +188,11 @@ Span * PageCache::FreeObjectToSpan(void * ptr)
 
 void * PageCache::fetchFromSystem(size_type count) const noexcept
 {
-    return ::operator new(count * PAGE_SIZE, std::nothrow);
+    void * ptr = nullptr;
+    if (posix_memalign(&ptr, PAGE_SIZE, count * PAGE_SIZE) != 0) {
+        return nullptr;
+    }
+    return ptr;
 }
 
 } // namespace WW
