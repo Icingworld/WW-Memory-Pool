@@ -22,7 +22,7 @@ PageCache::~PageCache()
 
             // 释放页段管理的内存空间
             void * ptr = Span::idToPtr(span.id());
-            ::operator delete(ptr);
+            free(ptr);
 
             // 销毁页段
             delete(&span);
@@ -118,23 +118,25 @@ void PageCache::returnSpan(Span * span)
             break;
         }
 
+        Span * span_prev = it->second;
+
         // 判断合并后是否超出上限
-        if (span->count() + it->second->count() > MAX_PAGE_NUM) {
+        if (span->count() + span_prev->count() > MAX_PAGE_NUM) {
             break;
         }
 
         // 从链表中删除该空闲页
-        _Spans[it->second->count() - 1].erase(it->second);
+        _Spans[span_prev->count() - 1].erase(span_prev);
         // 从哈希表中删除该空闲页的首尾页号
-        _Span_map.erase(it->second->id());
-        _Span_map.erase(it->second->id() + it->second->count() - 1);
+        _Span_map.erase(span_prev->id());
+        _Span_map.erase(span_prev->id() + span_prev->count() - 1);
 
         // 合并页段
-        span->setId(it->second->id());
-        span->setCount(it->second->count() + span->count());
+        span->setId(span_prev->id());
+        span->setCount(span_prev->count() + span->count());
 
         // 删除原空闲页
-        delete it->second;
+        delete span_prev;
     }
 
     // 向后寻找空闲的页
@@ -152,17 +154,19 @@ void PageCache::returnSpan(Span * span)
             break;
         }
 
+        Span * span_next = it->second;
+
         // 从链表中删除该空闲页
-        _Spans[it->second->count() - 1].erase(it->second);
+        _Spans[span_next->count() - 1].erase(span_next);
         // 从哈希表中删除该空闲页的首尾页号
-        _Span_map.erase(it->second->id());
-        _Span_map.erase(it->second->id() + it->second->count() - 1);
+        _Span_map.erase(span_next->id());
+        _Span_map.erase(span_next->id() + span_next->count() - 1);
 
         // 合并页段，首页号不变，只需要调整大小
-        span->setCount(it->second->count() + span->count());
+        span->setCount(span_next->count() + span->count());
 
         // 删除原空闲页
-        delete it->second;
+        delete span_next;
     }
 
     // 合并完成，插入新的链表
