@@ -48,3 +48,32 @@ TEST_F(MemoryTest, SingleThreadMemoryTest)
 
     alloc.deallocate(p, 1);
 }
+
+TEST_F(MemoryTest, MultiThreadMemoryTest)
+{
+    constexpr int THREAD_NUM = 4;
+    std::vector<std::thread> threads;
+
+    for (int i = 0; i < THREAD_NUM; ++i) {
+        threads.emplace_back([]() {
+            // 当前线程的分配器
+            allocator<TestCase> alloc;
+
+            for (int j = 0; j < 10000; ++j) {
+                TestCase * p = alloc.allocate(1);
+                alloc.construct(p);
+
+                EXPECT_EQ(p->name, "test");
+                EXPECT_EQ(p->id, std::this_thread::get_id());
+
+                alloc.destroy(p);
+
+                alloc.deallocate(p, 1);
+            }
+        });
+    }
+
+    for (int i = 0; i < THREAD_NUM; ++i) {
+        threads[i].join();
+    }
+}
