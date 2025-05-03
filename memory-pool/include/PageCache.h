@@ -8,18 +8,13 @@
 namespace WW
 {
 
-constexpr std::uint8_t MAX_PAGE_COUNT = 128;    // 最大页数
-
 /**
  * @brief 页缓存
  */
 class PageCache
 {
-public:
-    using size_type = std::size_t;
-
 private:
-    std::array<SpanList, MAX_PAGE_COUNT> _Spans;        // 页段链表数组
+    std::array<SpanList, MAX_PAGE_NUM> _Spans;          // 页段链表数组
     std::unordered_map<size_type, Span *> _Span_map;    // 页号到页段指针的映射
     std::recursive_mutex _Mutex;                        // 页缓存锁
 

@@ -1,5 +1,7 @@
 #include "PageCache.h"
 
+#include <cstdlib>
+
 namespace WW
 {
 
@@ -12,7 +14,20 @@ PageCache::PageCache()
 
 PageCache::~PageCache()
 {
-    // TODO
+    // 释放所有页段
+    for (size_type i = 0; i < MAX_PAGE_NUM; ++i) {
+        while (!_Spans[i].empty()) {
+            Span & span = _Spans[i].front();
+            _Spans[i].pop_front();
+
+            // 释放页段管理的内存空间
+            void * ptr = Span::idToPtr(span.id());
+            free(ptr);
+
+            // 销毁页段
+            delete(&span);
+        }
+    }
 }
 
 PageCache & PageCache::getPageCache()
@@ -33,7 +48,7 @@ Span * PageCache::fetchSpan(size_type count)
     }
 
     // 没有正好这么大的页段，尝试从更大块内存中切出页段
-    for (size_type i = count; i < MAX_PAGE_COUNT; ++i) {
+    for (size_type i = count; i < MAX_PAGE_NUM; ++i) {
         if (!_Spans[i].empty()) {
             // 取出页段
             Span & bigger_span = _Spans[i].front();
@@ -67,16 +82,16 @@ Span * PageCache::fetchSpan(size_type count)
 
     // 没找到更大的页段，直接申请一个最大的页段，然后按照上面的流程重新获取页段
     Span * max_span = new Span();
-    void * ptr = fetchFromSystem(MAX_PAGE_COUNT);
+    void * ptr = fetchFromSystem(MAX_PAGE_NUM);
     if (ptr == nullptr) {
         return nullptr;
     }
     
     // 计算页号
     max_span->setId(Span::ptrToId(ptr));
-    max_span->setCount(MAX_PAGE_COUNT);
-    // 插入MAX_PAGE_COUNT页的链表中
-    _Spans[MAX_PAGE_COUNT - 1].push_front(max_span);
+    max_span->setCount(MAX_PAGE_NUM);
+    // 插入MAX_PAGE_NUM页的链表中
+    _Spans[MAX_PAGE_NUM - 1].push_front(max_span);
     // 首页号插入哈希表
     _Span_map[max_span->id()] = max_span;
     // 尾页号插入哈希表
@@ -103,23 +118,25 @@ void PageCache::returnSpan(Span * span)
             break;
         }
 
+        Span * span_prev = it->second;
+
         // 判断合并后是否超出上限
-        if (span->count() + it->second->count() > MAX_PAGE_COUNT) {
+        if (span->count() + span_prev->count() > MAX_PAGE_NUM) {
             break;
         }
 
         // 从链表中删除该空闲页
-        _Spans[it->second->count() - 1].erase(it->second);
+        _Spans[span_prev->count() - 1].erase(span_prev);
         // 从哈希表中删除该空闲页的首尾页号
-        _Span_map.erase(it->second->id());
-        _Span_map.erase(it->second->id() + it->second->count() - 1);
+        _Span_map.erase(span_prev->id());
+        _Span_map.erase(span_prev->id() + span_prev->count() - 1);
 
         // 合并页段
-        span->setId(it->second->id());
-        span->setCount(it->second->count() + span->count());
+        span->setId(span_prev->id());
+        span->setCount(span_prev->count() + span->count());
 
         // 删除原空闲页
-        delete it->second;
+        delete span_prev;
     }
 
     // 向后寻找空闲的页
@@ -133,21 +150,23 @@ void PageCache::returnSpan(Span * span)
         }
 
         // 判断合并后是否超出上限
-        if (span->count() + it->second->count() > MAX_PAGE_COUNT) {
+        if (span->count() + it->second->count() > MAX_PAGE_NUM) {
             break;
         }
 
+        Span * span_next = it->second;
+
         // 从链表中删除该空闲页
-        _Spans[it->second->count() - 1].erase(it->second);
+        _Spans[span_next->count() - 1].erase(span_next);
         // 从哈希表中删除该空闲页的首尾页号
-        _Span_map.erase(it->second->id());
-        _Span_map.erase(it->second->id() + it->second->count() - 1);
+        _Span_map.erase(span_next->id());
+        _Span_map.erase(span_next->id() + span_next->count() - 1);
 
         // 合并页段，首页号不变，只需要调整大小
-        span->setCount(it->second->count() + span->count());
+        span->setCount(span_next->count() + span->count());
 
         // 删除原空闲页
-        delete it->second;
+        delete span_next;
     }
 
     // 合并完成，插入新的链表
@@ -173,7 +192,11 @@ Span * PageCache::FreeObjectToSpan(void * ptr)
 
 void * PageCache::fetchFromSystem(size_type count) const noexcept
 {
-    return ::operator new(count * PAGE_SIZE, std::nothrow);
+    void * ptr = nullptr;
+    if (posix_memalign(&ptr, PAGE_SIZE, count * PAGE_SIZE) != 0) {
+        return nullptr;
+    }
+    return ptr;
 }
 
 } // namespace WW

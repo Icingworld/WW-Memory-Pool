@@ -5,16 +5,11 @@
 namespace WW
 {
 
-constexpr std::size_t MAX_MEMORY_SIZE = PAGE_SIZE * MAX_PAGE_COUNT;    // 内存池可以管理的最大内存
-
 /**
  * @brief 线程缓存
  */
 class ThreadCache
 {
-public:
-    using size_type = std::size_t;
-
 private:
     CentralCache & _Central_cache;                      // 中心缓存
     std::array<FreeList, MAX_ARRAY_SIZE> _Freelists;    // 自由表数组
