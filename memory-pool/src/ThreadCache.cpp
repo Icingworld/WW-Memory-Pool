@@ -124,6 +124,10 @@ void ThreadCache::fetchFromCentralCache(size_type size) noexcept
     // 每次申请按照最大数量申请，并且提升最大数量
     size_type index = sizeToIndex(size);
     size_type count = _Freelists[index].max_size();
+    if (count > MAX_BLOCK_NUM) {
+        count = MAX_BLOCK_NUM;
+    }
+
     FreeObject * obj = _Central_cache.fetchRange(size, count);
     FreeObject * cur = obj;
     

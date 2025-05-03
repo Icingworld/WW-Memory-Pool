@@ -15,6 +15,6 @@ constexpr size_type MAX_PAGE_NUM = 128;             // 最大页数
 constexpr size_type MAX_ARRAY_SIZE = 208;           // 内存块数组大小
 
 constexpr size_type MAX_MEMORY_SIZE = PAGE_SIZE * MAX_PAGE_NUM / 2;    // 内存池可以管理的最大内存
-constexpr size_type MAX_THREAD_CACHE_LIMIT = 512;   // 线程缓存向中心缓存申请内存块，每次最多512个
+constexpr size_type MAX_BLOCK_NUM = 512;            // 线程缓存向中心缓存申请内存块，每次最多512个
 
 } // namespace WW
