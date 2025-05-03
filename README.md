@@ -38,6 +38,10 @@
 
 ## 使用
 
+### 要求
+
++ 环境：`Linux x86_64`
+
 ### 直接使用
 
 直接操作线程缓存实例，示例见[threadcache_test.cpp](test/src/threadcache_test.cpp)
