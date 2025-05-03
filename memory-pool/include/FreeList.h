@@ -91,6 +91,7 @@ public:
 private:
     FreeObject * _Head;         // 虚拟头节点
     size_type _Size;            // 空闲内存块数量
+    size_type _Max_size;        // 最大数量
 
 public:
     FreeList();
@@ -132,6 +133,16 @@ public:
      * @brief 获取空闲内存块数量
      */
     size_type size() const noexcept;
+
+    /**
+     * @brief 获取最大大小
+     */
+    size_type max_size() const noexcept;
+
+    /**
+     * @brief 设置最大大小
+     */
+    void setMax(size_type count) noexcept;
 };
 
 } // namespace WW
