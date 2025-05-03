@@ -17,7 +17,7 @@ private:
     FreeList _Free_list;            // 空闲内存块
     size_type _Page_id;             // 页段号
     Span * _Prev;                   // 前一个页段
-    Span * _Next;                   // 后一个页段 
+    Span * _Next;                   // 后一个页段
     size_type _Page_count;          // 页数
     size_type _Used;                // 已使用的内存块数
 

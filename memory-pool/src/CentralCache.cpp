@@ -116,17 +116,16 @@ Span * CentralCache::getFreeSpan(size_type size)
     lock.unlock();
 
     // 计算出应该申请多少页的页段
-    // 最多一次需要512个内存块的空间
-    constexpr std::size_t MAX_BLOCK_NUMS = 512;
-    // 申请的总内存大小
-    std::size_t total_size = size * MAX_BLOCK_NUMS;
+
+    // 尝试申请最大数量的内存块，计算申请的总内存大小
+    size_type total_size = size * MAX_BLOCK_NUM;
     // 初步计算需要多少页
-    std::size_t page_count = total_size / PAGE_SIZE;
-    // 如果还有剩余内存，则需要申请额外的一页
+    size_type page_count = total_size / PAGE_SIZE;
     if (total_size % MAX_PAGE_NUM != 0) {
         page_count += 1;
     }
-    // 每个页段最多只有128页
+
+    // 不能超过最大页数
     if (page_count > MAX_PAGE_NUM) {
         page_count = MAX_PAGE_NUM;
     }

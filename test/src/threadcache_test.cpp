@@ -1,7 +1,7 @@
 #include <string>
 
-#include <ThreadCache.h>
 #include <gtest/gtest.h>
+#include <ThreadCache.h>
 
 class ThreadCacheTest : public testing::Test
 {

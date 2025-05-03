@@ -64,6 +64,7 @@ FreeListIterator FreeListIterator::operator++(int) noexcept
 FreeList::FreeList()
     : _Head(new FreeObject())
     , _Size(0)
+    , _Max_size(1)
 {
 }
 
@@ -108,6 +109,16 @@ bool FreeList::empty() const noexcept
 size_type FreeList::size() const noexcept
 {
     return _Size;
+}
+
+size_type FreeList::max_size() const noexcept
+{
+    return _Max_size;
+}
+
+void FreeList::setMax(size_type size) noexcept
+{
+    _Max_size = size;
 }
 
 } // namespace WW

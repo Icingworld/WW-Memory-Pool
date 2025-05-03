@@ -73,7 +73,7 @@ void ThreadCache::deallocate(void * ptr, size_type size) noexcept
 
     // 检查是否需要归还给中心缓存
     if (shouldReturn(index)) {
-        returnToCentralCache(index, 20);
+        returnToCentralCache(index, _Freelists[index].max_size());
     }
 }
 
@@ -111,8 +111,8 @@ size_type ThreadCache::sizeToIndex(size_type size) const noexcept
 
 bool ThreadCache::shouldReturn(size_type index) const noexcept
 {
-    // 后续进行动态扩展
-    if (_Freelists[index].size() >= 20) {
+    // 超过一次申请的最大数量，归还一部分
+    if (_Freelists[index].size() >= _Freelists[index].max_size()) {
         return true;
     }
 
@@ -121,15 +121,24 @@ bool ThreadCache::shouldReturn(size_type index) const noexcept
 
 void ThreadCache::fetchFromCentralCache(size_type size) noexcept
 {
-    // 一次获取20个，后续扩展
-    FreeObject * obj = _Central_cache.fetchRange(size, 20);
-    FreeObject * cur = obj;
+    // 每次申请按照最大数量申请，并且提升最大数量
     size_type index = sizeToIndex(size);
+    size_type count = _Freelists[index].max_size();
+    if (count > MAX_BLOCK_NUM) {
+        count = MAX_BLOCK_NUM;
+    }
+
+    FreeObject * obj = _Central_cache.fetchRange(size, count);
+    FreeObject * cur = obj;
+    
     while (cur != nullptr) {
         FreeObject * next = cur->next();
         _Freelists[index].push_front(cur);
         cur = next;
     }
+
+    // 提升最大数量
+    _Freelists[index].setMax(count + 1);
 }
 
 void ThreadCache::returnToCentralCache(size_type index, size_type nums) noexcept
