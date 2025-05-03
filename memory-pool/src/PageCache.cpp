@@ -12,7 +12,14 @@ PageCache::PageCache()
 
 PageCache::~PageCache()
 {
-    // TODO
+    // 释放所有页段
+    for (size_type i = 0; i < MAX_PAGE_NUM; ++i) {
+        if (!_Spans[i].empty()) {
+            Span & span = _Spans[i].front();
+            _Spans[i].pop_front();
+            ::operator delete(&span);
+        }
+    }
 }
 
 PageCache & PageCache::getPageCache()
