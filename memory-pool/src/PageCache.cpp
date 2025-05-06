@@ -1,6 +1,10 @@
 #include "PageCache.h"
 
+#if defined(_WIN32) || defined(_WIN64)
+#include <windows.h>
+#else
 #include <cstdlib>
+#endif
 
 namespace WW
 {
@@ -23,7 +27,12 @@ PageCache::~PageCache()
 
             // 释放页段管理的内存空间
             void * ptr = Span::idToPtr(span.id());
-            free(ptr);
+
+#if defined(_WIN32) || defined(_WIN64)
+            VirtualFree(ptr, 0, MEM_RELEASE);
+#elif defined(__linux__)
+            std::free(ptr);
+#endif
 
             // 销毁页段
             delete(&span);
@@ -187,9 +196,13 @@ Span * PageCache::FreeObjectToSpan(void * ptr)
 void * PageCache::fetchFromSystem(size_type count) const noexcept
 {
     void * ptr = nullptr;
-    if (posix_memalign(&ptr, PAGE_SIZE, count * PAGE_SIZE) != 0) {
-        return nullptr;
-    }
+
+#if defined(_WIN32) || defined(_WIN64)
+    ptr = VirtualAlloc(nullptr, count * PAGE_SIZE, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+#elif defined(__linux__)
+    posix_memalign(&ptr, PAGE_SIZE, count * PAGE_SIZE);
+#endif
+
     return ptr;
 }
 
