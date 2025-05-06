@@ -16,7 +16,9 @@ void * Platform::align_malloc(size_type alignment, size_type size)
 #if defined(_WIN32) || defined(_WIN64)
     ptr = VirtualAlloc(nullptr, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 #elif defined(__linux__)
-    posix_memalign(&ptr, alignment, size);
+    if (posix_memalign(&ptr, alignment, size) != 0) {
+        ptr = nullptr;
+    }
 #endif
 
     return ptr;
