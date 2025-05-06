@@ -6,12 +6,20 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_subdirectory(memory-pool)
 
-option(TEST "Enable Test" OFF)
+option(WWTEST "Enable Test" ON)
+option(WWBENCHMARK "Enable Benchmark" OFF)
 
-if (TEST)
+if (WWTEST)
     message(STATUS "Test ON")
     add_subdirectory(third-party)
     add_subdirectory(test)
 else()
     message(STATUS "Test OFF")
+endif()
+
+if (WWBENCHMARK)
+    message(STATUS "Benchmark ON")
+    add_subdirectory(benchmark)
+else()
+    message(STATUS "Benchmark OFF")
 endif()
