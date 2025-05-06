@@ -14,6 +14,7 @@ PageCache::PageCache()
 
 PageCache::~PageCache()
 {
+    std::lock_guard<std::recursive_mutex> lock(_Mutex);
     // 释放所有页段
     for (size_type i = 0; i < MAX_PAGE_NUM; ++i) {
         while (!_Spans[i].empty()) {
@@ -68,13 +69,12 @@ Span * PageCache::fetchSpan(size_type count)
             _Spans[new_span->count() - 1].push_back(new_span);
 
             // 将两个页段的首尾页号储存到哈希表中
-            // bigger_span的首页号对应的还是这个页段，所以不需要修改
-            // bigger_span的尾页号插入哈希表
-            _Span_map[bigger_span.id() + bigger_span.count() - 1] = &bigger_span;
-            // new_span的首页号插入哈希表
-            _Span_map[new_span->id()] = new_span;
-            // 修改哈希表中new_span的尾页号
-            _Span_map[new_span->id() + new_span->count() - 1] = new_span;
+            // bigger_span的首页号和尾页号都还在哈希表中，不需要修改
+
+            // new_span的页号插入哈希表
+            for (size_type first = 0; first < new_span->count(); ++first) {
+                _Span_map[new_span->id() + first] = new_span;
+            }
 
             return &bigger_span;
         }
@@ -92,10 +92,10 @@ Span * PageCache::fetchSpan(size_type count)
     max_span->setCount(MAX_PAGE_NUM);
     // 插入MAX_PAGE_NUM页的链表中
     _Spans[MAX_PAGE_NUM - 1].push_front(max_span);
-    // 首页号插入哈希表
-    _Span_map[max_span->id()] = max_span;
-    // 尾页号插入哈希表
-    _Span_map[max_span->id() + max_span->count() - 1] = max_span;
+    // 页号插入哈希表
+    for (size_type first = 0; first < max_span->count(); ++first) {
+        _Span_map[max_span->id() + first] = max_span;
+    }
 
     return fetchSpan(count);
 }
@@ -127,9 +127,6 @@ void PageCache::returnSpan(Span * span)
 
         // 从链表中删除该空闲页
         _Spans[span_prev->count() - 1].erase(span_prev);
-        // 从哈希表中删除该空闲页的首尾页号
-        _Span_map.erase(span_prev->id());
-        _Span_map.erase(span_prev->id() + span_prev->count() - 1);
 
         // 合并页段
         span->setId(span_prev->id());
@@ -158,9 +155,6 @@ void PageCache::returnSpan(Span * span)
 
         // 从链表中删除该空闲页
         _Spans[span_next->count() - 1].erase(span_next);
-        // 从哈希表中删除该空闲页的首尾页号
-        _Span_map.erase(span_next->id());
-        _Span_map.erase(span_next->id() + span_next->count() - 1);
 
         // 合并页段，首页号不变，只需要调整大小
         span->setCount(span_next->count() + span->count());
@@ -171,10 +165,10 @@ void PageCache::returnSpan(Span * span)
 
     // 合并完成，插入新的链表
     _Spans[span->count() - 1].push_back(span);
-    // 首页号插入哈希表
-    _Span_map[span->id()] = span;
-    // 尾页号插入哈希表
-    _Span_map[span->id() + span->count() - 1] = span;
+    // 更新哈希表中的页号
+    for (size_type first = 0; first < span->count(); ++first) {
+        _Span_map[span->id() + first] = span;
+    }
 }
 
 Span * PageCache::FreeObjectToSpan(void * ptr)

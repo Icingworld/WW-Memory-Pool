@@ -58,17 +58,23 @@ TEST_F(MemoryTest, MultiThreadMemoryTest)
         threads.emplace_back([]() {
             // 当前线程的分配器
             allocator<TestCase> alloc;
+            std::vector<TestCase *> cases;
+            constexpr int size = 1000;
+            cases.reserve(size);
 
-            for (int j = 0; j < 10000; ++j) {
+            for (int j = 0; j < size; ++j) {
                 TestCase * p = alloc.allocate(1);
                 alloc.construct(p);
 
                 EXPECT_EQ(p->name, "test");
                 EXPECT_EQ(p->id, std::this_thread::get_id());
 
-                alloc.destroy(p);
+                cases.emplace_back(p);
+            }
 
-                alloc.deallocate(p, 1);
+            for (int j = 0; j < size; ++j) {
+                alloc.destroy(cases[j]);
+                alloc.deallocate(cases[j], 1);
             }
         });
     }
