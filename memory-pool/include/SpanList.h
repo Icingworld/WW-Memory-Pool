@@ -159,7 +159,7 @@ public:
 
 private:
     Span _Head;                         // 虚拟头节点
-    std::recursive_mutex _Mutex;        // 链表递归锁
+    std::mutex _Mutex;                  // 链表递归锁
 
 public:
     SpanList();
@@ -211,7 +211,17 @@ public:
     /**
      * @brief 获取链表锁
      */
-    std::recursive_mutex & getMutex();
+    std::mutex & getMutex() noexcept;
+
+    /**
+     * @brief 上锁
+     */
+    void lock() noexcept;
+
+    /**
+     * @brief 解锁
+     */
+    void unlock() noexcept;
 };
 
 } // namespace WW

@@ -85,7 +85,6 @@ public:
 class FreeList
 {
 public:
-    using size_type = std::size_t;
     using iterator = FreeListIterator;
 
 private:
@@ -143,6 +142,11 @@ public:
      * @brief 设置最大大小
      */
     void setMax(size_type count) noexcept;
+
+    /**
+     * @brief 清空链表
+     */
+    void clear() noexcept;
 };
 
 } // namespace WW

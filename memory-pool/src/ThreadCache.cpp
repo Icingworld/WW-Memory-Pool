@@ -131,12 +131,10 @@ void ThreadCache::fetchFromCentralCache(size_type size) noexcept
     FreeObject * obj = _Central_cache.fetchRange(size, count);
     FreeObject * cur = obj;
     
-    count = 0;
     while (cur != nullptr) {
         FreeObject * next = cur->next();
         _Freelists[index].push_front(cur);
         cur = next;
-        ++count;
     }
 
     // 提升最大数量

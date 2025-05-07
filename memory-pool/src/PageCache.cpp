@@ -56,33 +56,32 @@ Span * PageCache::fetchSpan(size_type pages)
             Span & bigger_span = _Spans[i].front();
             _Spans[i].pop_front();
 
-            // 切分页段，切成i = pages + old_pages的页段
+            // 切分页段，切成i = (i - pages) + pages的页段
 
-            // 新建一个new_span用于储存后面长old_pages的页段的页段
-            Span * new_span = new Span();
-            new_span->setId(bigger_span.id() + pages);
-            new_span->setCount(bigger_span.count() - pages);
+            // 新建一个split_span用于储存后面长pages的页段的页段
+            Span * split_span = new Span();
+            split_span->setId(bigger_span.id() + i - pages);
+            split_span->setCount(pages);
 
-            // bigger_span用于储存前面长count的页段，直接修改页数
-            bigger_span.setCount(pages);
+            // bigger_span用于储存前面长i - pages的页段，直接修改页数
+            bigger_span.setCount(i - pages);
 
-            // 新页段插入到对应链表中
-            _Spans[new_span->count() - 1].push_front(new_span);
+            // 前面的页段插入到对应链表中
+            _Spans[bigger_span.count() - 1].push_front(&bigger_span);
 
             // 将两个页段的首尾页号储存到哈希表中
             // bigger_span的首页号和尾页号都还在哈希表中，不需要修改
 
             // 修改new_span对应的的页号
-            for (size_type first = 0; first < new_span->count(); ++first) {
-                _Span_map[new_span->id() + first] = new_span;
+            for (size_type first = 0; first < split_span->count(); ++first) {
+                _Span_map[split_span->id() + first] = split_span;
             }
 
-            return &bigger_span;
+            return split_span;
         }
     }
 
     // 没找到更大的页段，直接申请一个最大的页段，然后按照上面的流程重新获取页段
-    Span * max_span = new Span();
     void * ptr = fetchFromSystem(MAX_PAGE_NUM);
     if (ptr == nullptr) {
         return nullptr;
@@ -90,28 +89,31 @@ Span * PageCache::fetchSpan(size_type pages)
 
     // 记录该对齐指针
     _Align_pointers.emplace_back(ptr);
+
+    Span * max_span = new Span();
     
-    // max_span用来返回给中心缓存
+    // max_span用来储存MAX_PAGE_NUM - pages的页段
     max_span->setId(Span::ptrToId(ptr));
-    max_span->setCount(pages);
-    // 新建一个页段用于储存后面的部分
-    Span * new_span = new Span();
-    new_span->setId(max_span->id() + pages);
-    new_span->setCount(MAX_PAGE_NUM - pages);
+    max_span->setCount(MAX_PAGE_NUM - pages);
+
+    // 新建一个页段用于返回
+    Span * split_span = new Span();
+    split_span->setId(max_span->id() + MAX_PAGE_NUM - pages);
+    split_span->setCount(pages);
 
     // 新页段插入页段链表中
-    _Spans[new_span->count() - 1].push_front(new_span);
+    _Spans[max_span->count() - 1].push_front(max_span);
 
     // 页号插入哈希表
     for (size_type first = 0; first < max_span->count(); ++first) {
         _Span_map[max_span->id() + first] = max_span;
     }
 
-    for (size_type first = 0; first < new_span->count(); ++first) {
-        _Span_map[new_span->id() + first] = new_span;
+    for (size_type first = 0; first < split_span->count(); ++first) {
+        _Span_map[split_span->id() + first] = split_span;
     }
 
-    return max_span;
+    return split_span;
 }
 
 void PageCache::returnSpan(Span * span)
@@ -120,10 +122,6 @@ void PageCache::returnSpan(Span * span)
 
     // 向前寻找空闲的页
     while (true) {
-        if (span->id() == 0) {
-            break;
-        }
-
         // 寻找上一个页段的尾页号
         size_type page_id_prev = span->id() - 1;
         auto it = _Span_map.find(page_id_prev);
@@ -143,11 +141,12 @@ void PageCache::returnSpan(Span * span)
         _Spans[span_prev->count() - 1].erase(span_prev);
 
         // 合并页段
-        span->setId(span_prev->id());
-        span->setCount(span_prev->count() + span->count());
+        span_prev->setCount(span_prev->count() + span->count());
 
         // 删除原空闲页
-        delete span_prev;
+        delete span;
+
+        span = span_prev;
     }
 
     // 向后寻找空闲的页

@@ -183,9 +183,19 @@ bool SpanList::empty() const noexcept
     return (_Head.next() == &_Head);
 }
 
-std::recursive_mutex & SpanList::getMutex()
+std::mutex & SpanList::getMutex() noexcept
 {
     return _Mutex;
+}
+
+void SpanList::lock() noexcept
+{
+    _Mutex.lock();
+}
+
+void SpanList::unlock() noexcept
+{
+    _Mutex.unlock();
 }
 
 } // namespace WW

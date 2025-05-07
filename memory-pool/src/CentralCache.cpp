@@ -22,11 +22,12 @@ FreeObject * CentralCache::fetchRange(size_type size, size_type count)
     size_type index = sizeToIndex(size);
 
     // 锁住index对应链表
-    std::lock_guard<std::recursive_mutex> lock(_Spans[index].getMutex());
+    _Spans[index].lock();
 
-    // 获取一个合适的空闲页
+    // 获取一个非空的空闲页
     Span * span = getFreeSpan(size);
     if (span == nullptr) {
+        _Spans[index].unlock();
         return nullptr;
     }
 
@@ -45,6 +46,7 @@ FreeObject * CentralCache::fetchRange(size_type size, size_type count)
         }
     }
 
+    _Spans[index].unlock();
     return head;
 }
 
@@ -53,12 +55,12 @@ void CentralCache::returnRange(size_type size, FreeObject * free_object)
     size_type index = sizeToIndex(size);
 
     // 锁住index对应链表
-    std::lock_guard<std::recursive_mutex> lock(_Spans[index].getMutex());
+    _Spans[index].lock();
 
     // 依次归还空闲内存块
     while (free_object != nullptr) {
         // 查找该内存块属于哪个页段
-        Span * span = _Page_cache.FreeObjectToSpan(free_object);
+        Span * span = _Page_cache.FreeObjectToSpan(reinterpret_cast<void *>(free_object));
         // 将内存块加入到该页段的空闲链表中
         FreeObject * next = free_object->next();
         if (span == nullptr) {
@@ -74,12 +76,17 @@ void CentralCache::returnRange(size_type size, FreeObject * free_object)
             // 已经使用完毕，可以从链表中删除
             _Spans[index].erase(span);
             // 归还页缓存
+            span->setPrev(nullptr);
+            span->setNext(nullptr);
+            span->getFreeList()->clear();
             _Page_cache.returnSpan(span);
         }
 
         // 向后移动
         free_object = next;
     }
+
+    _Spans[index].unlock();
 }
 
 size_type CentralCache::sizeToIndex(size_type size) noexcept
@@ -103,17 +110,14 @@ Span * CentralCache::getFreeSpan(size_type size)
 {
     size_type index = sizeToIndex(size);
 
-    std::unique_lock<std::recursive_mutex> lock(_Spans[index].getMutex());
-
     for (auto it = _Spans[index].begin(); it != _Spans[index].end(); ++it) {
         // 遍历链表，查看是否有已经切过的页
         if (!it->getFreeList()->empty()) {
-            return it.operator->();
+            return &*it;
         }
     }
 
     // 没找到空闲的页段，需要向页缓存申请
-    lock.unlock();
 
     // 计算出应该申请多少页的页段
 
@@ -152,7 +156,6 @@ Span * CentralCache::getFreeSpan(size_type size)
     }
 
     // 将页段挂到链表上
-    lock.lock();
     _Spans[index].push_front(span);
 
     return span;

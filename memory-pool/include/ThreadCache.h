@@ -57,11 +57,13 @@ private:
 
     /**
      * @brief 判断是否需要归还给中心缓存
+     * @param index 索引
      */
     bool shouldReturn(size_type index)  const noexcept;
 
     /**
      * @brief 从中心缓存获取一批内存块
+     * @param size 申请的内存块大小
      */
     void fetchFromCentralCache(size_type size) noexcept;
 

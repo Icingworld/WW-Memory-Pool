@@ -116,4 +116,11 @@ void FreeList::setMax(size_type size) noexcept
     _Max_size = size;
 }
 
+void FreeList::clear() noexcept
+{
+    _Head.setNext(nullptr);
+    _Size = 0;
+    _Max_size = 1;
+}
+
 } // namespace WW
