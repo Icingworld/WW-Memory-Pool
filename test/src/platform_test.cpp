@@ -1,7 +1,7 @@
 #include <vector>
 
 #include <gtest/gtest.h>
-#include <platform.h>
+#include <Platform.h>
 
 bool is_aligned(void * ptr, std::size_t alignment) {
     return reinterpret_cast<std::uintptr_t>(ptr) % alignment == 0;

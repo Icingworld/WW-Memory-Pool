@@ -14,7 +14,6 @@ void * Platform::align_malloc(size_type alignment, size_type size)
     void * ptr = nullptr;
 
 #if defined(_WIN32) || defined(_WIN64)
-    (void)alignment;
     ptr = _aligned_malloc(size, alignment);
 #elif defined(__linux__)
     if (posix_memalign(&ptr, alignment, size) != 0) {
