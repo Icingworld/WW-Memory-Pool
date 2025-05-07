@@ -1,7 +1,5 @@
 #include "PageCache.h"
 
-#include <cassert>
-
 #include <Platform.h>
 
 namespace WW
@@ -17,7 +15,7 @@ PageCache::PageCache()
 
 PageCache::~PageCache()
 {
-    std::lock_guard<std::recursive_mutex> lock(_Mutex);
+    std::lock_guard<std::mutex> lock(_Mutex);
     // 释放所有页段
     for (size_type i = 0; i < MAX_PAGE_NUM; ++i) {
         while (!_Spans[i].empty()) {
@@ -42,7 +40,7 @@ PageCache & PageCache::getPageCache()
 
 Span * PageCache::fetchSpan(size_type pages)
 {
-    std::lock_guard<std::recursive_mutex> lock(_Mutex);
+    std::lock_guard<std::mutex> lock(_Mutex);
 
     // 如果有空闲页段，直接从链表中直接获取页段
     if (!_Spans[pages - 1].empty()) {
@@ -113,14 +111,12 @@ Span * PageCache::fetchSpan(size_type pages)
         _Span_map[new_span->id() + first] = new_span;
     }
 
-    assert(pages == max_span->count());
-
     return max_span;
 }
 
 void PageCache::returnSpan(Span * span)
 {
-    std::lock_guard<std::recursive_mutex> lock(_Mutex);
+    std::lock_guard<std::mutex> lock(_Mutex);
 
     // 向前寻找空闲的页
     while (true) {
@@ -193,7 +189,7 @@ Span * PageCache::FreeObjectToSpan(void * ptr)
 {
     size_type id = Span::ptrToId(ptr);
 
-    std::lock_guard<std::recursive_mutex> lock(_Mutex);
+    std::lock_guard<std::mutex> lock(_Mutex);
     auto it = _Span_map.find(id);
     if (it == _Span_map.end()) {
         return nullptr;

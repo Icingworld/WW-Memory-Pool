@@ -18,7 +18,7 @@ private:
     std::array<SpanList, MAX_PAGE_NUM> _Spans;          // 页段链表数组
     std::unordered_map<size_type, Span *> _Span_map;    // 页号到页段指针的映射
     std::vector<void *> _Align_pointers;                // 对齐指针数组
-    std::recursive_mutex _Mutex;                        // 页缓存锁
+    std::mutex _Mutex;                                  // 页缓存锁
 
 private:
     PageCache();
@@ -50,9 +50,10 @@ public:
     void returnSpan(Span * span);
 
     /**
-     * @brief 通过内存地址找到所属页段
+     * @brief 通过内存地址查找所属页段
      * @param ptr 内存地址
      * @return 成功找到返回`Span *`，失败时返回`nullptr`
+     * @details 页段是对齐分配的，其中的地址只要按照偏移量偏移就一定偏移到该页段的开始地址
      */
     Span * FreeObjectToSpan(void * ptr);
 
