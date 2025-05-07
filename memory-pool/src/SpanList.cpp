@@ -130,67 +130,49 @@ SpanListIterator SpanListIterator::operator--(int) noexcept
 }
 
 SpanList::SpanList()
-    : _Head(new Span())
+    : _Head()
     , _Mutex()
 {
-    _Head->setNext(_Head);
-    _Head->setPrev(_Head);
-}
-
-SpanList::~SpanList()
-{
-    delete _Head;
+    _Head.setNext(&_Head);
+    _Head.setPrev(&_Head);
 }
 
 Span & SpanList::front() noexcept
 {
-    return *_Head->next();
+    return *_Head.next();
 }
 
 Span & SpanList::back() noexcept
 {
-    return *_Head->prev();
+    return *_Head.prev();
 }
 
 SpanList::iterator SpanList::begin() noexcept
 {
-    return iterator(_Head->next());
+    return iterator(_Head.next());
 }
 
 SpanList::iterator SpanList::end() noexcept
 {
-    return iterator(_Head);
+    return iterator(&_Head);
 }
 
-void SpanList::push_front(Span * span)
+void SpanList::push_front(Span * span) noexcept
 {
-    span->setNext(_Head->next());
-    span->setPrev(_Head);
-    _Head->next()->setPrev(span);
-    _Head->setNext(span);
+    span->setNext(_Head.next());
+    span->setPrev(&_Head);
+    _Head.next()->setPrev(span);
+    _Head.setNext(span);
 }
 
-void SpanList::push_back(Span * span)
+void SpanList::pop_front() noexcept
 {
-    span->setNext(_Head);
-    span->setPrev(_Head->prev());
-    _Head->prev()->setNext(span);
-    _Head->setPrev(span);
+    Span * _Front = _Head.next();
+    _Head.setNext(_Front->next());
+    _Front->next()->setPrev(&_Head);
 }
 
-void SpanList::pop_front()
-{
-    _Head->setNext(_Head->next()->next());
-    _Head->next()->setPrev(_Head);
-}
-
-void SpanList::pop_back()
-{
-    _Head->setPrev(_Head->prev()->prev());
-    _Head->prev()->setNext(_Head);
-}
-
-void SpanList::erase(Span * span)
+void SpanList::erase(Span * span) noexcept
 {
     span->prev()->setNext(span->next());
     span->next()->setPrev(span->prev());
@@ -198,7 +180,7 @@ void SpanList::erase(Span * span)
 
 bool SpanList::empty() const noexcept
 {
-    return (_Head->next() == _Head);
+    return (_Head.next() == &_Head);
 }
 
 std::recursive_mutex & SpanList::getMutex()

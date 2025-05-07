@@ -158,13 +158,13 @@ public:
     using iterator = SpanListIterator;
 
 private:
-    Span * _Head;                       // 虚拟头节点
+    Span _Head;                         // 虚拟头节点
     std::recursive_mutex _Mutex;        // 链表递归锁
 
 public:
     SpanList();
 
-    ~SpanList();
+    ~SpanList() = default;
 
 public:
     /**
@@ -195,28 +195,18 @@ public:
     /**
      * @brief 将页段插入到头部
      */
-    void push_front(Span * span);
-
-    /**
-     * @brief 将页段插入到尾部
-     */
-    void push_back(Span * span);
+    void push_front(Span * span) noexcept;
 
     /**
      * @brief 从头部删除页段
      */
-    void pop_front();
-
-    /**
-     * @brief 从尾部删除页段
-     */
-    void pop_back();
+    void pop_front() noexcept;
 
     /**
      * @brief 删除指定页段
      * @param span 要删除的页段
      */
-    void erase(Span * span);
+    void erase(Span * span) noexcept;
 
     /**
      * @brief 获取链表锁
