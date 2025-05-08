@@ -49,14 +49,6 @@ public:
      */
     void returnSpan(Span * span);
 
-    /**
-     * @brief 通过内存地址查找所属页段
-     * @param ptr 内存地址
-     * @return 成功找到返回`Span *`，失败时返回`nullptr`
-     * @details 页段是对齐分配的，其中的地址只要按照偏移量偏移就一定偏移到该页段的开始地址
-     */
-    Span * FreeObjectToSpan(void * ptr);
-
 private:
     /**
      * @brief 从系统内存中获取指定大小的内存

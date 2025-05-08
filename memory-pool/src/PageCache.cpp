@@ -183,19 +183,6 @@ void PageCache::returnSpan(Span * span)
     _Spans[span->count() - 1].push_front(span);
 }
 
-Span * PageCache::FreeObjectToSpan(void * ptr)
-{
-    size_type id = Span::ptrToId(ptr);
-
-    std::lock_guard<std::mutex> lock(_Mutex);
-    auto it = _Span_map.find(id);
-    if (it == _Span_map.end()) {
-        return nullptr;
-    }
-
-    return it->second;
-}
-
 void * PageCache::fetchFromSystem(size_type pages) const noexcept
 {
     return Platform::align_malloc(PAGE_SIZE, pages << PAGE_SHIFT);

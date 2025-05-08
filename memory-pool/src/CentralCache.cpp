@@ -8,6 +8,7 @@ namespace WW
 CentralCache::CentralCache()
     : _Page_cache(PageCache::getPageCache())
     , _Spans()
+    , _Span_map()
 {
 }
 
@@ -59,15 +60,21 @@ void CentralCache::returnRange(size_type size, FreeObject * free_object)
 
     // 依次归还空闲内存块
     while (free_object != nullptr) {
-        // 查找该内存块属于哪个页段
-        Span * span = _Page_cache.FreeObjectToSpan(reinterpret_cast<void *>(free_object));
-        // 将内存块加入到该页段的空闲链表中
         FreeObject * next = free_object->next();
-        if (span == nullptr) {
+
+        // 查找该内存块属于哪个页段
+        void * ptr = reinterpret_cast<void *>(free_object);
+        size_type id = Span::ptrToId(ptr);
+        auto it = _Span_map.find(id);
+        if (it == _Span_map.end()) {
+            // 没找到这个页段，跳过
             free_object = next;
             continue;
         }
 
+        Span * span = it->second;
+
+        // 将内存块加入到该页段的空闲链表中
         span->getFreeList()->push_front(free_object);
         // 同步页段使用数量
         span->setUsed(span->used() - 1);
@@ -75,10 +82,14 @@ void CentralCache::returnRange(size_type size, FreeObject * free_object)
         if (span->used() == 0) {
             // 已经使用完毕，可以从链表中删除
             _Spans[index].erase(span);
-            // 归还页缓存
-            span->setPrev(nullptr);
-            span->setNext(nullptr);
             span->getFreeList()->clear();
+
+            // 解除该页段所有映射
+            for (size_type i = 0; i < span->count(); ++i) {
+                _Span_map.erase(span->id() + i);
+            }
+
+            // 归还页缓存
             _Page_cache.returnSpan(span);
         }
 
@@ -117,15 +128,16 @@ Span * CentralCache::getFreeSpan(size_type size)
         }
     }
 
-    // 没找到空闲的页段，需要向页缓存申请
+    _Spans[index].unlock();
 
+    // 没找到空闲的页段，需要向页缓存申请
     // 计算出应该申请多少页的页段
 
     // 尝试申请最大数量的内存块，计算申请的总内存大小
     size_type total_size = size * MAX_BLOCK_NUM;
     // 初步计算需要多少页
     size_type page_count = total_size / PAGE_SIZE;
-    if (total_size % MAX_PAGE_NUM != 0) {
+    if (total_size % PAGE_SIZE != 0) {
         page_count += 1;
     }
 
@@ -153,6 +165,13 @@ Span * CentralCache::getFreeSpan(size_type size)
         FreeObject * free_obj = reinterpret_cast<FreeObject *>(block_ptr);
         // 将此内存块挂到 freelist 上
         span->getFreeList()->push_front(free_obj);
+    }
+
+    _Spans[index].lock();
+
+    // 建立该页段的映射
+    for (size_type i = 0; i < span->count(); ++i) {
+        _Span_map[span->id() + i] = span;
     }
 
     // 将页段挂到链表上

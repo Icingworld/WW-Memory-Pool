@@ -11,8 +11,9 @@ namespace WW
 class CentralCache
 {
 private:
-    PageCache & _Page_cache;                        // 页缓存
-    std::array<SpanList, MAX_ARRAY_SIZE> _Spans;    // 页段链表数组
+    PageCache & _Page_cache;                            // 页缓存
+    std::array<SpanList, MAX_ARRAY_SIZE> _Spans;        // 页段链表数组
+    std::unordered_map<size_type, Span *> _Span_map;    // 页号到页段指针的映射
 
 private:
     CentralCache();
@@ -40,7 +41,7 @@ public:
 
     /**
      * @brief 将空闲内存块归还到中心缓存
-     * @param index 索引
+     * @param size 内存块大小
      * @param free_object 空闲内存块链表
      */
     void returnRange(size_type size, FreeObject * free_object);
@@ -52,11 +53,11 @@ private:
     static size_type sizeToIndex(size_type size) noexcept;
 
     /**
-     * @brief 从自由表中获取一个空闲的页段
-     * @param index 索引
+     * @brief 获取一个空闲的页段
+     * @param size 内存块大小
      * @return 成功时返回`Span *`，失败时返回`nullptr`
      */
-    Span * getFreeSpan(size_type index);
+    Span * getFreeSpan(size_type size);
 };
 
 } // namespace WW
