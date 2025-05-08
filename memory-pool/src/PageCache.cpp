@@ -49,13 +49,11 @@ Span * PageCache::fetchSpan(size_type pages)
         Span & span = _Spans[pages - 1].front();
         _Spans[pages - 1].pop_front();
 
-        // 设置页段映射，由于首尾页号已经设置过了，这里只需要设置中间页号
-        for (size_type i = 1; i < pages - 1; ++i) {
-            _Span_map[span.id() + i] = &span;
+        // 从映射表中移除页段
+        _Span_map.erase(span.id());
+        if (span.count() > 1) {
+            _Span_map.erase(span.id() + span.count() - 1);
         }
-
-        // 设置页段正在使用
-        span.setUsing(true);
 
         return &span;
     }
@@ -80,16 +78,11 @@ Span * PageCache::fetchSpan(size_type pages)
             // 前面的页段插入到对应链表中
             _Spans[bigger_span.count() - 1].push_front(&bigger_span);
 
-            // 将两个页段的首尾页号储存到哈希表中
-            // bigger_span的首页号在哈希表中，不需要修改，设置它的尾页号
+            // 修改映射表
+            // 解除原bigger_span的尾页号映射
+            _Span_map.erase(bigger_span.id() + bigger_span.count() + split_span->count() - 1);
+            // 添加新bigger_span的尾页号映射
             _Span_map[bigger_span.id() + bigger_span.count() - 1] = &bigger_span;
-
-            // 修改split_span对应的的页号
-            for (size_type first = 0; first < split_span->count(); ++first) {
-                _Span_map[split_span->id() + first] = split_span;
-            }
-
-            split_span->setUsing(true);
 
             return split_span;
         }
@@ -120,14 +113,7 @@ Span * PageCache::fetchSpan(size_type pages)
 
     // max_span页号插入哈希表
     _Span_map[max_span->id()] = max_span;
-    _Span_map[max_span->id() + MAX_PAGE_NUM - pages] = max_span;
-
-    // split_span页号插入哈希表
-    for (size_type first = 0; first < split_span->count(); ++first) {
-        _Span_map[split_span->id() + first] = split_span;
-    }
-
-    split_span->setUsing(true);
+    _Span_map[max_span->id() + max_span->count() - 1] = max_span;
 
     return split_span;
 }
@@ -136,20 +122,10 @@ void PageCache::returnSpan(Span * span)
 {
     std::lock_guard<std::mutex> lock(_Mutex);
 
-    // 解除span本身的映射
-    for (size_type first = 0; first < span->count(); ++first) {
-        _Span_map.erase(span->id() + first);
-    }
-
     // 向前寻找空闲的页
     auto prev_it = _Span_map.find(span->id() - 1);
     while (prev_it != _Span_map.end()) {
         Span * span_prev = prev_it->second;
-
-        if (span_prev->isUsing()) {
-            // 页段正在使用
-            break;
-        }
 
         // 判断合并后是否超出上限
         if (span->count() + span_prev->count() > MAX_PAGE_NUM) {
@@ -177,11 +153,6 @@ void PageCache::returnSpan(Span * span)
     auto next_it = _Span_map.find(span->id() + span->count());
     while (next_it != _Span_map.end()) {
         Span * span_next = next_it->second;
-
-        if (span_next->isUsing()) {
-            // 页段正在使用
-            break;
-        }
 
         // 判断合并后是否超出上限
         if (span->count() + span_next->count() > MAX_PAGE_NUM) {
