@@ -7,22 +7,38 @@
 
 using namespace WW;
 
-constexpr size_type THREAD = 4;         // 线程数
-constexpr size_type ROUND = 10;         // 轮数
-constexpr size_type SIZE = 10000;       // 单次操作内存大小
-constexpr size_type TIMES = 1000;       // 单次测试操作次数
+/**
+ * @brief 测试结构
+ */
+class TestCase
+{
+public:
+    std::string name;
+    std::thread::id id;
+    std::chrono::time_point<std::chrono::system_clock> time;
+
+public:
+    TestCase()
+        : TestCase("test")
+    {
+    }
+
+    explicit TestCase(const std::string & name)
+        : name(name)
+        , id(std::this_thread::get_id())
+        , time(std::chrono::system_clock::now())
+    {
+    }
+};
+
+constexpr size_type THREAD = 4;                 // 线程数
+constexpr size_type ROUND = 100;                // 轮数
+constexpr size_type SIZE = sizeof(TestCase);    // 单次操作内存大小
+constexpr size_type TIMES = 1000;               // 单次测试操作次数
 
 using high_resolution_clock = std::chrono::high_resolution_clock;
 using time_point = std::chrono::high_resolution_clock::time_point;
 using duration = std::chrono::duration<double, std::milli>;
-
-/**
- * @brief 测试结构
- */
-struct TestStruct
-{
-    char data[SIZE];
-};
 
 int main()
 {
@@ -69,20 +85,21 @@ int main()
 
     time_point pool_start = high_resolution_clock::now();
 
-    for (size_type i = 0; i < THREAD; i++) {
+    for (size_type i = 0; i < THREAD; ++i) {
         pool_threads.emplace_back([]() {
-            allocator<TestStruct> alloc;
-            for (size_type j = 0; j < ROUND; j++) {
-                std::vector<TestStruct *> ptrs;
+            allocator<TestCase> alloc;
+            
+            for (size_type j = 0; j < ROUND; ++j) {
+                std::vector<TestCase *> ptrs;
                 ptrs.reserve(TIMES);
 
-                for (size_type k = 0; k < TIMES; k++) {
-                    TestStruct * ptr = alloc.allocate(1);
+                for (size_type k = 0; k < TIMES; ++k) {
+                    TestCase * ptr = alloc.allocate(1);
                     ptrs.emplace_back(ptr);
                 }
 
-                for (TestStruct * ptr : ptrs) {
-                    alloc.deallocate(ptr, 1);
+                for (size_type k = 0; k < TIMES; ++k) {
+                    alloc.deallocate(ptrs[k], 1);
                 }
             }
         });
