@@ -9,6 +9,7 @@ Span::Span()
     , _Prev(nullptr)
     , _Next(nullptr)
     , _Page_count(0)
+    , _Is_using(false)
     , _Used(0)
 {
 }
@@ -51,6 +52,16 @@ Span * Span::next() const noexcept
 void Span::setNext(Span * next) noexcept
 {
     _Next = next;
+}
+
+bool Span::isUsing() const noexcept
+{
+    return _Is_using;
+}
+
+void Span::setUsing(bool is_using) noexcept
+{
+    _Is_using = is_using;
 }
 
 size_type Span::used() const noexcept
@@ -159,9 +170,10 @@ SpanList::iterator SpanList::end() noexcept
 
 void SpanList::push_front(Span * span) noexcept
 {
-    span->setNext(_Head.next());
+    Span * _Next = _Head.next();
+    span->setNext(_Next);
     span->setPrev(&_Head);
-    _Head.next()->setPrev(span);
+    _Next->setPrev(span);
     _Head.setNext(span);
 }
 
@@ -174,8 +186,10 @@ void SpanList::pop_front() noexcept
 
 void SpanList::erase(Span * span) noexcept
 {
-    span->prev()->setNext(span->next());
-    span->next()->setPrev(span->prev());
+    Span * _Prev = span->prev();
+    Span * _Next = span->next();
+    _Prev->setNext(_Next);
+    _Next->setPrev(_Prev);
 }
 
 bool SpanList::empty() const noexcept

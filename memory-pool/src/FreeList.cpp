@@ -82,7 +82,8 @@ void FreeList::push_front(FreeObject * free_object)
 
 void FreeList::pop_front()
 {
-    _Head.setNext(_Head.next()->next());
+    FreeObject * _Next = _Head.next()->next();
+    _Head.setNext(_Next);
     --_Size;
 }
 

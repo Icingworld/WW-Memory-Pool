@@ -1,6 +1,7 @@
 #include "PageCache.h"
 
 #include <Platform.h>
+#include <cassert>
 
 namespace WW
 {
@@ -46,25 +47,26 @@ Span * PageCache::fetchSpan(size_type pages)
     if (!_Spans[pages - 1].empty()) {
         Span & span = _Spans[pages - 1].front();
         _Spans[pages - 1].pop_front();
+        span.setUsing(true);
         return &span;
     }
 
     // 没有正好这么大的页段，尝试从更大块内存中切出页段
     for (size_type i = pages; i < MAX_PAGE_NUM; ++i) {
         if (!_Spans[i].empty()) {
-            // 取出页段
+            // 取出页段，该页段页数为i + 1
             Span & bigger_span = _Spans[i].front();
             _Spans[i].pop_front();
 
-            // 切分页段，切成i = (i - pages) + pages的页段
+            // 切分i + 1页的页段，切成i = (i + 1 - pages) + pages的两个页段
 
-            // 新建一个split_span用于储存后面长pages的页段的页段
+            // 新建一个split_span用于储存后面长pages页的页段
             Span * split_span = new Span();
-            split_span->setId(bigger_span.id() + i - pages);
+            split_span->setId(bigger_span.id() + i + 1 - pages);
             split_span->setCount(pages);
 
-            // bigger_span用于储存前面长i - pages的页段，直接修改页数
-            bigger_span.setCount(i - pages);
+            // bigger_span用于储存前面长i + 1 - pages的页段，直接修改页数
+            bigger_span.setCount(i + 1 - pages);
 
             // 前面的页段插入到对应链表中
             _Spans[bigger_span.count() - 1].push_front(&bigger_span);
@@ -72,10 +74,12 @@ Span * PageCache::fetchSpan(size_type pages)
             // 将两个页段的首尾页号储存到哈希表中
             // bigger_span的首页号和尾页号都还在哈希表中，不需要修改
 
-            // 修改new_span对应的的页号
+            // 修改split_span对应的的页号
             for (size_type first = 0; first < split_span->count(); ++first) {
                 _Span_map[split_span->id() + first] = split_span;
             }
+
+            split_span->setUsing(true);
 
             return split_span;
         }
@@ -113,6 +117,8 @@ Span * PageCache::fetchSpan(size_type pages)
         _Span_map[split_span->id() + first] = split_span;
     }
 
+    split_span->setUsing(true);
+
     return split_span;
 }
 
@@ -121,16 +127,14 @@ void PageCache::returnSpan(Span * span)
     std::lock_guard<std::mutex> lock(_Mutex);
 
     // 向前寻找空闲的页
-    while (true) {
-        // 寻找上一个页段的尾页号
-        size_type page_id_prev = span->id() - 1;
-        auto it = _Span_map.find(page_id_prev);
-        if (it == _Span_map.end() || it->second->used() != 0) {
-            // 没找到页，或者找到了但正在使用
+    auto prev_it = _Span_map.find(span->id() - 1);
+    while (prev_it != _Span_map.end()) {
+        Span * span_prev = prev_it->second;
+
+        if (span_prev->isUsing()) {
+            // 页段正在使用
             break;
         }
-
-        Span * span_prev = it->second;
 
         // 判断合并后是否超出上限
         if (span->count() + span_prev->count() > MAX_PAGE_NUM) {
@@ -147,24 +151,24 @@ void PageCache::returnSpan(Span * span)
         delete span;
 
         span = span_prev;
+
+        prev_it = _Span_map.find(span->id() - 1);
     }
 
     // 向后寻找空闲的页
-    while (true) {
-        // 寻找下一个页段的首页号
-        size_type page_id_next = span->id() + span->count();
-        auto it = _Span_map.find(page_id_next);
-        if (it == _Span_map.end() || it->second->used() != 0) {
-            // 没找到页，或者找到了但正在使用
+    auto next_it = _Span_map.find(span->id() + span->count());
+    while (next_it != _Span_map.end()) {
+        Span * span_next = next_it->second;
+
+        if (span_next->isUsing()) {
+            // 页段正在使用
             break;
         }
 
         // 判断合并后是否超出上限
-        if (span->count() + it->second->count() > MAX_PAGE_NUM) {
+        if (span->count() + span_next->count() > MAX_PAGE_NUM) {
             break;
         }
-
-        Span * span_next = it->second;
 
         // 从链表中删除该空闲页
         _Spans[span_next->count() - 1].erase(span_next);
@@ -174,14 +178,17 @@ void PageCache::returnSpan(Span * span)
 
         // 删除原空闲页
         delete span_next;
+
+        next_it = _Span_map.find(span->id() + span->count());
     }
 
-    // 合并完成，插入新的链表
-    _Spans[span->count() - 1].push_front(span);
     // 更新哈希表中的页号
     for (size_type first = 0; first < span->count(); ++first) {
         _Span_map[span->id() + first] = span;
     }
+
+    // 合并完成，插入新的链表
+    _Spans[span->count() - 1].push_front(span);
 }
 
 Span * PageCache::FreeObjectToSpan(void * ptr)
