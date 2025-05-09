@@ -6,10 +6,7 @@ namespace WW
 {
 
 CentralCache::CentralCache()
-    : _Page_cache(PageCache::getPageCache())
-    , _Spans()
-    , _Span_map()
-    , _Mutex()
+    : _Spans()
 {
 }
 
@@ -24,12 +21,11 @@ FreeObject * CentralCache::fetchRange(size_type size, size_type count)
     size_type index = sizeToIndex(size);
 
     // 锁住index对应链表
-    _Spans[index].lock();
+    std::unique_lock<std::mutex> lock(_Spans[index].getMutex());
 
     // 获取一个非空的空闲页
     Span * span = getFreeSpan(size);
     if (span == nullptr) {
-        _Spans[index].unlock();
         return nullptr;
     }
 
@@ -48,7 +44,6 @@ FreeObject * CentralCache::fetchRange(size_type size, size_type count)
         }
     }
 
-    _Spans[index].unlock();
     return head;
 }
 
@@ -57,7 +52,7 @@ void CentralCache::returnRange(size_type size, FreeObject * free_object)
     size_type index = sizeToIndex(size);
 
     // 锁住index对应链表
-    _Spans[index].lock();
+    std::unique_lock<std::mutex> lock(_Spans[index].getMutex());
 
     // 依次归还空闲内存块
     while (free_object != nullptr) {
@@ -66,7 +61,7 @@ void CentralCache::returnRange(size_type size, FreeObject * free_object)
         // 查找该内存块属于哪个页段
         void * ptr = reinterpret_cast<void *>(free_object);
 
-        Span * span = objectToSpan(ptr);
+        Span * span = PageCache::getPageCache().objectToSpan(ptr);
 
         // 没找到则跳过，这种情况不应该出现
         if (span == nullptr) {
@@ -84,21 +79,13 @@ void CentralCache::returnRange(size_type size, FreeObject * free_object)
             _Spans[index].erase(span);
             span->getFreeList()->clear();
 
-            // 解除该页段所有映射
-            _Mutex.lock();
-            _Span_map.erase(span->id());
-            _Span_map.erase(span->id() + span->count() - 1);
-            _Mutex.unlock();
-
             // 归还页缓存
-            _Page_cache.returnSpan(span);
+            PageCache::getPageCache().returnSpan(span);
         }
 
         // 向后移动
         free_object = next;
     }
-
-    _Spans[index].unlock();
 }
 
 size_type CentralCache::sizeToIndex(size_type size) noexcept
@@ -129,8 +116,6 @@ Span * CentralCache::getFreeSpan(size_type size)
         }
     }
 
-    _Spans[index].unlock();
-
     // 没找到空闲的页段，需要向页缓存申请
     // 计算出应该申请多少页的页段
 
@@ -148,7 +133,7 @@ Span * CentralCache::getFreeSpan(size_type size)
     }
 
     // 申请页段
-    Span * span = _Page_cache.fetchSpan(page_count);
+    Span * span = PageCache::getPageCache().fetchSpan(page_count);
     if (span == nullptr) {
         return nullptr;
     }
@@ -168,40 +153,8 @@ Span * CentralCache::getFreeSpan(size_type size)
         span->getFreeList()->push_front(free_obj);
     }
 
-    _Spans[index].lock();
-
-    // 建立该页段的映射
-    _Mutex.lock();
-    _Span_map[span->id()] = span;
-    _Span_map[span->id() + span->count() - 1] = span;
-    _Mutex.unlock();
-
     // 将页段挂到链表上
     _Spans[index].push_front(span);
-
-    return span;
-}
-
-Span * CentralCache::objectToSpan(void * ptr) noexcept
-{
-    size_type id = Span::ptrToId(ptr);
-
-    std::lock_guard<std::mutex> lock(_Mutex);
-
-    // 寻找首个大于该页号的迭代器
-    auto it = _Span_map.upper_bound(id);
-
-    if (it == _Span_map.begin()) {
-        return nullptr;
-    }
-
-    --it;
-    Span * span = it->second;
-
-    if (id >= span->id() + span->count()) {
-        // 不在该页段范围内
-        return nullptr;
-    }
 
     return span;
 }

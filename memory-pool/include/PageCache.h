@@ -3,6 +3,7 @@
 #include <array>
 #include <vector>
 #include <unordered_map>
+#include <map>
 
 #include <SpanList.h>
 
@@ -15,10 +16,11 @@ namespace WW
 class PageCache
 {
 private:
-    std::array<SpanList, MAX_PAGE_NUM> _Spans;          // 页段链表数组
-    std::unordered_map<size_type, Span *> _Span_map;    // 页号到页段指针的映射
-    std::vector<void *> _Align_pointers;                // 对齐指针数组
-    std::mutex _Mutex;                                  // 页缓存锁
+    std::array<SpanList, MAX_PAGE_NUM> _Spans;              // 页段链表数组
+    std::unordered_map<size_type, Span *> _Free_span_map;   // 页号到空闲页段指针的映射
+    std::map<size_type, Span *> _Busy_span_map;             // 页号到繁忙页段指针的映射
+    std::vector<void *> _Align_pointers;                    // 对齐指针数组
+    std::mutex _Mutex;                                      // 页缓存锁
 
 private:
     PageCache();
@@ -48,6 +50,13 @@ public:
      * @param span 页段
      */
     void returnSpan(Span * span);
+
+    /**
+     * @brief 通过内存块指针找到对应页段
+     * @param ptr 内存块指针
+     * @return 成功时返回`Span *`，失败时返回`nullptr`
+     */
+    Span * objectToSpan(void * ptr) noexcept;
 
 private:
     /**

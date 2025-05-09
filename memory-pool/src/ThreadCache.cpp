@@ -4,7 +4,6 @@ namespace WW
 {
 
 ThreadCache::ThreadCache()
-    : _Central_cache(CentralCache::getCentralCache())
 {
 }
 
@@ -128,7 +127,7 @@ void ThreadCache::fetchFromCentralCache(size_type size) noexcept
         count = MAX_BLOCK_NUM;
     }
 
-    FreeObject * obj = _Central_cache.fetchRange(size, count);
+    FreeObject * obj = CentralCache::getCentralCache().fetchRange(size, count);
     FreeObject * cur = obj;
     
     while (cur != nullptr) {
@@ -152,7 +151,7 @@ void ThreadCache::returnToCentralCache(size_type index, size_type nums) noexcept
         head = obj;
     }
 
-    _Central_cache.returnRange(index, head);
+    CentralCache::getCentralCache().returnRange(index, head);
 }
 
 } // namespace WW

@@ -8,7 +8,8 @@ namespace WW
 
 PageCache::PageCache()
     : _Spans()
-    , _Span_map()
+    , _Free_span_map()
+    , _Busy_span_map()
     , _Align_pointers()
     , _Mutex()
 {
@@ -49,11 +50,13 @@ Span * PageCache::fetchSpan(size_type pages)
         Span & span = _Spans[pages - 1].front();
         _Spans[pages - 1].pop_front();
 
-        // 从映射表中移除页段
-        _Span_map.erase(span.id());
-        if (span.count() > 1) {
-            _Span_map.erase(span.id() + span.count() - 1);
-        }
+        // 从空闲映射表中移除页段
+        _Free_span_map.erase(span.id());
+        _Free_span_map.erase(span.id() + span.count() - 1);
+
+        // 将页段插入到繁忙映射表中
+        _Busy_span_map[span.id()] = &span;
+        _Busy_span_map[span.id() + span.count() - 1] = &span;
 
         return &span;
     }
@@ -80,9 +83,13 @@ Span * PageCache::fetchSpan(size_type pages)
 
             // 修改映射表
             // 解除原bigger_span的尾页号映射
-            _Span_map.erase(bigger_span.id() + bigger_span.count() + split_span->count() - 1);
+            _Free_span_map.erase(bigger_span.id() + bigger_span.count() + split_span->count() - 1);
             // 添加新bigger_span的尾页号映射
-            _Span_map[bigger_span.id() + bigger_span.count() - 1] = &bigger_span;
+            _Free_span_map[bigger_span.id() + bigger_span.count() - 1] = &bigger_span;
+
+            // split_span页号插入繁忙映射表
+            _Busy_span_map[split_span->id()] = split_span;
+            _Busy_span_map[split_span->id() + split_span->count() - 1] = split_span;
 
             return split_span;
         }
@@ -111,9 +118,13 @@ Span * PageCache::fetchSpan(size_type pages)
     // 新页段插入页段链表中
     _Spans[max_span->count() - 1].push_front(max_span);
 
-    // max_span页号插入哈希表
-    _Span_map[max_span->id()] = max_span;
-    _Span_map[max_span->id() + max_span->count() - 1] = max_span;
+    // max_span页号插入空闲映射表
+    _Free_span_map[max_span->id()] = max_span;
+    _Free_span_map[max_span->id() + max_span->count() - 1] = max_span;
+
+    // split_span页号插入繁忙映射表
+    _Busy_span_map[split_span->id()] = split_span;
+    _Busy_span_map[split_span->id() + split_span->count() - 1] = split_span;
 
     return split_span;
 }
@@ -122,9 +133,13 @@ void PageCache::returnSpan(Span * span)
 {
     std::lock_guard<std::mutex> lock(_Mutex);
 
+    // 从繁忙映射表中删除该页段
+    _Busy_span_map.erase(span->id());
+    _Busy_span_map.erase(span->id() + span->count() - 1);
+
     // 向前寻找空闲的页
-    auto prev_it = _Span_map.find(span->id() - 1);
-    while (prev_it != _Span_map.end()) {
+    auto prev_it = _Free_span_map.find(span->id() - 1);
+    while (prev_it != _Free_span_map.end()) {
         Span * span_prev = prev_it->second;
 
         // 判断合并后是否超出上限
@@ -136,8 +151,8 @@ void PageCache::returnSpan(Span * span)
         _Spans[span_prev->count() - 1].erase(span_prev);
 
         // 从哈希表中删除该空闲页
-        _Span_map.erase(span_prev->id());
-        _Span_map.erase(span_prev->id() + span_prev->count() - 1);
+        _Free_span_map.erase(span_prev->id());
+        _Free_span_map.erase(span_prev->id() + span_prev->count() - 1);
 
         // 合并页段
         span->setId(span_prev->id());
@@ -146,12 +161,12 @@ void PageCache::returnSpan(Span * span)
         // 删除原空闲页
         delete span_prev;
 
-        prev_it = _Span_map.find(span->id() - 1);
+        prev_it = _Free_span_map.find(span->id() - 1);
     }
 
     // 向后寻找空闲的页
-    auto next_it = _Span_map.find(span->id() + span->count());
-    while (next_it != _Span_map.end()) {
+    auto next_it = _Free_span_map.find(span->id() + span->count());
+    while (next_it != _Free_span_map.end()) {
         Span * span_next = next_it->second;
 
         // 判断合并后是否超出上限
@@ -163,8 +178,8 @@ void PageCache::returnSpan(Span * span)
         _Spans[span_next->count() - 1].erase(span_next);
 
         // 从哈希表中删除该空闲页
-        _Span_map.erase(span_next->id());
-        _Span_map.erase(span_next->id() + span_next->count() - 1);
+        _Free_span_map.erase(span_next->id());
+        _Free_span_map.erase(span_next->id() + span_next->count() - 1);
 
         // 合并页段，首页号不变，只需要调整大小
         span->setCount(span_next->count() + span->count());
@@ -172,15 +187,39 @@ void PageCache::returnSpan(Span * span)
         // 删除原空闲页
         delete span_next;
 
-        next_it = _Span_map.find(span->id() + span->count());
+        next_it = _Free_span_map.find(span->id() + span->count());
     }
 
     // 添加新页段的映射
-    _Span_map[span->id()] = span;
-    _Span_map[span->id() + span->count() - 1] = span;
+    _Free_span_map[span->id()] = span;
+    _Free_span_map[span->id() + span->count() - 1] = span;
 
     // 合并完成，插入新的链表
     _Spans[span->count() - 1].push_front(span);
+}
+
+Span * PageCache::objectToSpan(void * ptr) noexcept
+{
+    size_type id = Span::ptrToId(ptr);
+
+    std::lock_guard<std::mutex> lock(_Mutex);
+
+    // 寻找首个大于该页号的迭代器
+    auto it = _Busy_span_map.upper_bound(id);
+
+    if (it == _Busy_span_map.begin()) {
+        return nullptr;
+    }
+
+    --it;
+    Span * span = it->second;
+
+    if (id >= span->id() + span->count()) {
+        // 不在该页段范围内
+        return nullptr;
+    }
+
+    return span;
 }
 
 void * PageCache::fetchFromSystem(size_type pages) const noexcept

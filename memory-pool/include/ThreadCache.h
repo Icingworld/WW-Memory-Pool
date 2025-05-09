@@ -11,7 +11,6 @@ namespace WW
 class ThreadCache
 {
 private:
-    CentralCache & _Central_cache;                      // 中心缓存
     std::array<FreeList, MAX_ARRAY_SIZE> _Freelists;    // 自由表数组
 
 private:
