@@ -1,5 +1,7 @@
 #pragma once
 
+#include <map>
+
 #include <PageCache.h>
 
 namespace WW
@@ -13,7 +15,8 @@ class CentralCache
 private:
     PageCache & _Page_cache;                            // 页缓存
     std::array<SpanList, MAX_ARRAY_SIZE> _Spans;        // 页段链表数组
-    std::unordered_map<size_type, Span *> _Span_map;    // 页号到页段指针的映射
+    std::map<size_type, Span *> _Span_map;              // 页号到页段指针的映射
+    std::mutex _Mutex;                                  // 中心缓存锁
 
 private:
     CentralCache();
@@ -58,6 +61,13 @@ private:
      * @return 成功时返回`Span *`，失败时返回`nullptr`
      */
     Span * getFreeSpan(size_type size);
+
+    /**
+     * @brief 通过内存块指针找到对应页段
+     * @param ptr 内存块指针
+     * @return 成功时返回`Span *`，失败时返回`nullptr`
+     */
+    Span * objectToSpan(void * ptr) noexcept;
 };
 
 } // namespace WW

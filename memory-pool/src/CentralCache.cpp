@@ -9,6 +9,7 @@ CentralCache::CentralCache()
     : _Page_cache(PageCache::getPageCache())
     , _Spans()
     , _Span_map()
+    , _Mutex()
 {
 }
 
@@ -64,15 +65,14 @@ void CentralCache::returnRange(size_type size, FreeObject * free_object)
 
         // 查找该内存块属于哪个页段
         void * ptr = reinterpret_cast<void *>(free_object);
-        size_type id = Span::ptrToId(ptr);
-        auto it = _Span_map.find(id);
-        if (it == _Span_map.end()) {
-            // 没找到这个页段，跳过
+
+        Span * span = objectToSpan(ptr);
+
+        // 没找到则跳过，这种情况不应该出现
+        if (span == nullptr) {
             free_object = next;
             continue;
         }
-
-        Span * span = it->second;
 
         // 将内存块加入到该页段的空闲链表中
         span->getFreeList()->push_front(free_object);
@@ -85,9 +85,10 @@ void CentralCache::returnRange(size_type size, FreeObject * free_object)
             span->getFreeList()->clear();
 
             // 解除该页段所有映射
-            for (size_type i = 0; i < span->count(); ++i) {
-                _Span_map.erase(span->id() + i);
-            }
+            _Mutex.lock();
+            _Span_map.erase(span->id());
+            _Span_map.erase(span->id() + span->count() - 1);
+            _Mutex.unlock();
 
             // 归还页缓存
             _Page_cache.returnSpan(span);
@@ -170,12 +171,37 @@ Span * CentralCache::getFreeSpan(size_type size)
     _Spans[index].lock();
 
     // 建立该页段的映射
-    for (size_type i = 0; i < span->count(); ++i) {
-        _Span_map[span->id() + i] = span;
-    }
+    _Mutex.lock();
+    _Span_map[span->id()] = span;
+    _Span_map[span->id() + span->count() - 1] = span;
+    _Mutex.unlock();
 
     // 将页段挂到链表上
     _Spans[index].push_front(span);
+
+    return span;
+}
+
+Span * CentralCache::objectToSpan(void * ptr) noexcept
+{
+    size_type id = Span::ptrToId(ptr);
+
+    std::lock_guard<std::mutex> lock(_Mutex);
+
+    // 寻找首个大于该页号的迭代器
+    auto it = _Span_map.upper_bound(id);
+
+    if (it == _Span_map.begin()) {
+        return nullptr;
+    }
+
+    --it;
+    Span * span = it->second;
+
+    if (id >= span->id() + span->count()) {
+        // 不在该页段范围内
+        return nullptr;
+    }
 
     return span;
 }
