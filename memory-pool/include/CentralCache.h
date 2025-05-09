@@ -12,6 +12,7 @@ class CentralCache
 {
 private:
     std::array<SpanList, MAX_ARRAY_SIZE> _Spans;        // 页段链表数组
+    std::mutex _Mutex;                                  // 中心缓存锁
 
 private:
     CentralCache();

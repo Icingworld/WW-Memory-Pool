@@ -11,7 +11,7 @@ namespace WW
 class ThreadCache
 {
 private:
-    std::array<FreeList, MAX_ARRAY_SIZE> _Freelists;    // 自由表数组
+    std::array<FreeList, MAX_ARRAY_SIZE> _Free_lists;       // 自由表数组
 
 private:
     ThreadCache();

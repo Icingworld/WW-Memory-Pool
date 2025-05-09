@@ -21,7 +21,8 @@ FreeObject * CentralCache::fetchRange(size_type size, size_type count)
     size_type index = sizeToIndex(size);
 
     // 锁住index对应链表
-    std::unique_lock<std::mutex> lock(_Spans[index].getMutex());
+    // std::unique_lock<std::mutex> lock(_Spans[index].getMutex());
+    std::unique_lock<std::mutex> lock(_Mutex);
 
     // 获取一个非空的空闲页
     Span * span = getFreeSpan(size);
@@ -52,7 +53,8 @@ void CentralCache::returnRange(size_type size, FreeObject * free_object)
     size_type index = sizeToIndex(size);
 
     // 锁住index对应链表
-    std::unique_lock<std::mutex> lock(_Spans[index].getMutex());
+    // std::unique_lock<std::mutex> lock(_Spans[index].getMutex());
+    std::unique_lock<std::mutex> lock(_Mutex);
 
     // 依次归还空闲内存块
     while (free_object != nullptr) {
