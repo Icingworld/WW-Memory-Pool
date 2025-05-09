@@ -7,34 +7,19 @@
 
 using namespace WW;
 
+constexpr size_type THREAD = 4;                 // 线程数
+constexpr size_type ROUND = 1000;               // 轮数
+constexpr size_type SIZE = 128;                 // 单次操作内存大小
+constexpr size_type TIMES = 1000;               // 单次测试操作次数
+
 /**
  * @brief 测试结构
  */
 class TestCase
 {
 public:
-    std::string name;
-    std::thread::id id;
-    std::chrono::time_point<std::chrono::system_clock> time;
-
-public:
-    TestCase()
-        : TestCase("test")
-    {
-    }
-
-    explicit TestCase(const std::string & name)
-        : name(name)
-        , id(std::this_thread::get_id())
-        , time(std::chrono::system_clock::now())
-    {
-    }
+    char padding[SIZE];
 };
-
-constexpr size_type THREAD = 4;                 // 线程数
-constexpr size_type ROUND = 100;                // 轮数
-constexpr size_type SIZE = sizeof(TestCase);    // 单次操作内存大小
-constexpr size_type TIMES = 1000;               // 单次测试操作次数
 
 using high_resolution_clock = std::chrono::high_resolution_clock;
 using time_point = std::chrono::high_resolution_clock::time_point;
@@ -53,6 +38,7 @@ int main()
 
     for (size_type i = 0; i < THREAD; i++) {
         malloc_threads.emplace_back([]() {
+            
             for (size_type j = 0; j < ROUND; j++) {
                 std::vector<void *> ptrs;
                 ptrs.reserve(TIMES);
@@ -77,7 +63,7 @@ int main()
     duration malloc_duration = malloc_end - malloc_start;
 
     printf("%zu threads operated %zu rounds with %zu times each malloc and free, cost %.2f ms\n", THREAD, ROUND, TIMES, malloc_duration.count());
-    printf("=== MEMORY POOL TEST =====================================================================\n");
+    printf("=== MEMORY POOL TEST ======================================================================\n");
 
     // memory-pool测试
     std::vector<std::thread> pool_threads;
@@ -86,7 +72,7 @@ int main()
     time_point pool_start = high_resolution_clock::now();
 
     for (size_type i = 0; i < THREAD; ++i) {
-        pool_threads.emplace_back([]() {
+        pool_threads.emplace_back([i]() {
             allocator<TestCase> alloc;
             
             for (size_type j = 0; j < ROUND; ++j) {
@@ -113,5 +99,5 @@ int main()
     duration pool_duration = pool_end - pool_start;
 
     printf("%zu threads operated %zu rounds with %zu times each allocate and deallocate, cost %.2f ms\n", THREAD, ROUND, TIMES, pool_duration.count());
-    printf("==========================================================================================\n");
+    printf("===========================================================================================\n");
 }
