@@ -105,6 +105,18 @@ Span * PageCache::fetchSpan(size_type pages)
     _Align_pointers.emplace_back(ptr);
 
     Span * max_span = new Span();
+
+    if (pages == MAX_PAGE_NUM) {
+        // 恰好需要最大页数
+        max_span->setId(Span::ptrToId(ptr));
+        max_span->setCount(MAX_PAGE_NUM);
+
+        // 建立繁忙表映射
+        _Busy_span_map[max_span->id()] = max_span;
+        _Busy_span_map[max_span->id() + max_span->count() - 1] = max_span;
+
+        return max_span;
+    }
     
     // max_span用来储存MAX_PAGE_NUM - pages的页段
     max_span->setId(Span::ptrToId(ptr));
