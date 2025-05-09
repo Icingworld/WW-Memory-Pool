@@ -11,8 +11,7 @@ namespace WW
 class ThreadCache
 {
 private:
-    CentralCache & _Central_cache;                      // 中心缓存
-    std::array<FreeList, MAX_ARRAY_SIZE> _Freelists;    // 自由表数组
+    std::array<FreeList, MAX_ARRAY_SIZE> _Free_lists;       // 自由表数组
 
 private:
     ThreadCache();
@@ -57,11 +56,13 @@ private:
 
     /**
      * @brief 判断是否需要归还给中心缓存
+     * @param index 索引
      */
     bool shouldReturn(size_type index)  const noexcept;
 
     /**
      * @brief 从中心缓存获取一批内存块
+     * @param size 申请的内存块大小
      */
     void fetchFromCentralCache(size_type size) noexcept;
 

@@ -7,81 +7,97 @@
 
 using namespace WW;
 
-struct TestCase
+constexpr size_type THREAD = 4;                 // 线程数
+constexpr size_type ROUND = 1000;               // 轮数
+constexpr size_type SIZE = 128;                 // 单次操作内存大小
+constexpr size_type TIMES = 1000;               // 单次测试操作次数
+
+/**
+ * @brief 测试结构
+ */
+class TestCase
 {
-    char padding[48];
+public:
+    char padding[SIZE];
 };
+
+using high_resolution_clock = std::chrono::high_resolution_clock;
+using time_point = std::chrono::high_resolution_clock::time_point;
+using duration = std::chrono::duration<double, std::milli>;
 
 int main()
 {
-    constexpr size_type THREAD = 4;     // 线程数
-    constexpr size_type SIZE = 48;     // 单次操作内存大小
-    constexpr size_type TIMES = 1000;  // 单次测试操作次数
+    printf("================================== MEMORY BENCHMARK =======================================\n");
+    printf("=== MALLOC TEST ===========================================================================\n");
 
-    std::vector<void *> memory_pool_pointers;
-    
-    memory_pool_pointers.reserve(TIMES);
+    // malloc测试
+    std::vector<std::thread> malloc_threads;
+    malloc_threads.reserve(THREAD);
 
-    // 测试operator new
-    std::vector<std::thread> threads1;
-    threads1.reserve(THREAD);
+    time_point malloc_start = high_resolution_clock::now();
 
-    auto start = std::chrono::high_resolution_clock::now();
+    for (size_type i = 0; i < THREAD; i++) {
+        malloc_threads.emplace_back([]() {
+            
+            for (size_type j = 0; j < ROUND; j++) {
+                std::vector<void *> ptrs;
+                ptrs.reserve(TIMES);
 
-    for (int i = 0; i < THREAD; ++i) {
-        threads1.emplace_back([]() {
-            std::vector<void *> operator_new_pointers;
-            operator_new_pointers.reserve(TIMES);
+                for (size_type k = 0; k < TIMES; k++) {
+                    void * ptr = malloc(SIZE);
+                    ptrs.emplace_back(ptr);
+                }
 
-            for (int j = 0; j < TIMES; ++j) {
-                void * p = operator new(SIZE);
-                operator_new_pointers.emplace_back(p);
-            }
-
-            for (int j = 0; j < TIMES; ++j) {
-                operator delete(operator_new_pointers[j]);
+                for (void * ptr : ptrs) {
+                    free(ptr);
+                }
             }
         });
     }
 
-    for (int i = 0; i < THREAD; ++i) {
-        threads1[i].join();
+    for (auto & thread : malloc_threads) {
+        thread.join();
     }
 
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    time_point malloc_end = high_resolution_clock::now();
+    duration malloc_duration = malloc_end - malloc_start;
 
-    std::cout << "operator new: " << duration << "ms" << std::endl;
+    printf("%zu threads operated %zu rounds with %zu times each malloc and free, cost %.2f ms\n", THREAD, ROUND, TIMES, malloc_duration.count());
+    printf("=== MEMORY POOL TEST ======================================================================\n");
 
-    // 测试allocate
-    std::vector<std::thread> threads2;
-    threads2.reserve(THREAD);
+    // memory-pool测试
+    std::vector<std::thread> pool_threads;
+    pool_threads.reserve(THREAD);
 
-    start = std::chrono::high_resolution_clock::now();
+    time_point pool_start = high_resolution_clock::now();
 
-    for (int i = 0; i < THREAD; ++i) {
-        threads2.emplace_back([]() {
+    for (size_type i = 0; i < THREAD; ++i) {
+        pool_threads.emplace_back([i]() {
             allocator<TestCase> alloc;
-            std::vector<TestCase *> allocate_pointers;
-            allocate_pointers.reserve(TIMES);
+            
+            for (size_type j = 0; j < ROUND; ++j) {
+                std::vector<TestCase *> ptrs;
+                ptrs.reserve(TIMES);
 
-            for (int j = 0; j < TIMES; ++j) {
-                TestCase * p = alloc.allocate(1);
-                allocate_pointers.emplace_back(p);
-            }
+                for (size_type k = 0; k < TIMES; ++k) {
+                    TestCase * ptr = alloc.allocate(1);
+                    ptrs.emplace_back(ptr);
+                }
 
-            for (int j = 0; j < TIMES; ++j) {
-                alloc.deallocate(allocate_pointers[j], 1);
+                for (size_type k = 0; k < TIMES; ++k) {
+                    alloc.deallocate(ptrs[k], 1);
+                }
             }
         });
     }
 
-    for (int i = 0; i < THREAD; ++i) {
-        threads2[i].join();
+    for (auto & thread : pool_threads) {
+        thread.join();
     }
 
-    end = std::chrono::high_resolution_clock::now();
-    duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    time_point pool_end = high_resolution_clock::now();
+    duration pool_duration = pool_end - pool_start;
 
-    std::cout << "memory pool: " << duration << "ms" << std::endl;
+    printf("%zu threads operated %zu rounds with %zu times each allocate and deallocate, cost %.2f ms\n", THREAD, ROUND, TIMES, pool_duration.count());
+    printf("===========================================================================================\n");
 }

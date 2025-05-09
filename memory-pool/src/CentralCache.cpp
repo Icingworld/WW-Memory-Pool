@@ -6,8 +6,7 @@ namespace WW
 {
 
 CentralCache::CentralCache()
-    : _Page_cache(PageCache::getPageCache())
-    , _Spans()
+    : _Spans()
 {
 }
 
@@ -22,9 +21,10 @@ FreeObject * CentralCache::fetchRange(size_type size, size_type count)
     size_type index = sizeToIndex(size);
 
     // 锁住index对应链表
-    std::lock_guard<std::recursive_mutex> lock(_Spans[index].getMutex());
+    // std::unique_lock<std::mutex> lock(_Spans[index].getMutex());
+    std::unique_lock<std::mutex> lock(_Mutex);
 
-    // 获取一个合适的空闲页
+    // 获取一个非空的空闲页
     Span * span = getFreeSpan(size);
     if (span == nullptr) {
         return nullptr;
@@ -53,19 +53,25 @@ void CentralCache::returnRange(size_type size, FreeObject * free_object)
     size_type index = sizeToIndex(size);
 
     // 锁住index对应链表
-    std::lock_guard<std::recursive_mutex> lock(_Spans[index].getMutex());
+    // std::unique_lock<std::mutex> lock(_Spans[index].getMutex());
+    std::unique_lock<std::mutex> lock(_Mutex);
 
     // 依次归还空闲内存块
     while (free_object != nullptr) {
-        // 查找该内存块属于哪个页段
-        Span * span = _Page_cache.FreeObjectToSpan(free_object);
-        // 将内存块加入到该页段的空闲链表中
         FreeObject * next = free_object->next();
+
+        // 查找该内存块属于哪个页段
+        void * ptr = reinterpret_cast<void *>(free_object);
+
+        Span * span = PageCache::getPageCache().objectToSpan(ptr);
+
+        // 没找到则跳过，这种情况不应该出现
         if (span == nullptr) {
             free_object = next;
             continue;
         }
 
+        // 将内存块加入到该页段的空闲链表中
         span->getFreeList()->push_front(free_object);
         // 同步页段使用数量
         span->setUsed(span->used() - 1);
@@ -73,8 +79,10 @@ void CentralCache::returnRange(size_type size, FreeObject * free_object)
         if (span->used() == 0) {
             // 已经使用完毕，可以从链表中删除
             _Spans[index].erase(span);
+            span->getFreeList()->clear();
+
             // 归还页缓存
-            _Page_cache.returnSpan(span);
+            PageCache::getPageCache().returnSpan(span);
         }
 
         // 向后移动
@@ -103,25 +111,21 @@ Span * CentralCache::getFreeSpan(size_type size)
 {
     size_type index = sizeToIndex(size);
 
-    std::unique_lock<std::recursive_mutex> lock(_Spans[index].getMutex());
-
     for (auto it = _Spans[index].begin(); it != _Spans[index].end(); ++it) {
         // 遍历链表，查看是否有已经切过的页
         if (!it->getFreeList()->empty()) {
-            return it.operator->();
+            return &*it;
         }
     }
 
     // 没找到空闲的页段，需要向页缓存申请
-    lock.unlock();
-
     // 计算出应该申请多少页的页段
 
     // 尝试申请最大数量的内存块，计算申请的总内存大小
     size_type total_size = size * MAX_BLOCK_NUM;
     // 初步计算需要多少页
     size_type page_count = total_size / PAGE_SIZE;
-    if (total_size % MAX_PAGE_NUM != 0) {
+    if (total_size % PAGE_SIZE != 0) {
         page_count += 1;
     }
 
@@ -131,7 +135,7 @@ Span * CentralCache::getFreeSpan(size_type size)
     }
 
     // 申请页段
-    Span * span = _Page_cache.fetchSpan(page_count);
+    Span * span = PageCache::getPageCache().fetchSpan(page_count);
     if (span == nullptr) {
         return nullptr;
     }
@@ -152,7 +156,6 @@ Span * CentralCache::getFreeSpan(size_type size)
     }
 
     // 将页段挂到链表上
-    lock.lock();
     _Spans[index].push_front(span);
 
     return span;

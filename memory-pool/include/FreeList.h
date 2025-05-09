@@ -85,18 +85,17 @@ public:
 class FreeList
 {
 public:
-    using size_type = std::size_t;
     using iterator = FreeListIterator;
 
 private:
-    FreeObject * _Head;         // 虚拟头节点
+    FreeObject _Head;           // 虚拟头节点
     size_type _Size;            // 空闲内存块数量
     size_type _Max_size;        // 最大数量
 
 public:
     FreeList();
 
-    ~FreeList();
+    ~FreeList() = default;
 
 public:
     /**
@@ -143,6 +142,11 @@ public:
      * @brief 设置最大大小
      */
     void setMax(size_type count) noexcept;
+
+    /**
+     * @brief 清空链表
+     */
+    void clear() noexcept;
 };
 
 } // namespace WW

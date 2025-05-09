@@ -1,4 +1,5 @@
 #include <string>
+#include <thread>
 
 #include <gtest/gtest.h>
 #include <ThreadCache.h>
@@ -33,4 +34,31 @@ TEST_F(ThreadCacheTest, SingleThreadAllocateAndDeallocate)
     EXPECT_EQ(obj->d, std::string("hello, world! hello, world!"));
     obj->~LargeObject();
     thread_cache.deallocate(ptr, sizeof(LargeObject));
+}
+
+TEST_F(ThreadCacheTest, MultiThreadAllocateAndDeallocate)
+{
+    constexpr int THREAD_NUM = 4;
+    constexpr int COUNT = 1000;
+    std::vector<std::thread> threads;
+
+    for (int i = 0; i < THREAD_NUM; ++i) {
+        threads.emplace_back([i, COUNT, this]() {
+            std::vector<void *> ptrs;
+
+            for (int j = 0; j < COUNT; ++j) {
+                void * ptr = thread_cache.allocate(8 * i + 8);
+                EXPECT_NE(ptr, nullptr);
+                ptrs.emplace_back(ptr);
+            }
+
+            for (int j = 0; j < COUNT; ++j) {
+                thread_cache.deallocate(ptrs[j], 8 * i + 8);
+            }
+        });
+    }
+
+    for (auto & thread : threads) {
+        thread.join();
+    }
 }

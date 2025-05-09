@@ -19,6 +19,7 @@ private:
     Span * _Prev;                   // 前一个页段
     Span * _Next;                   // 后一个页段
     size_type _Page_count;          // 页数
+    bool _Is_using;                 // 是否正在使用
     size_type _Used;                // 已使用的内存块数
 
 public:
@@ -66,6 +67,16 @@ public:
      * @brief 设置下一个页段
      */
     void setNext(Span * next) noexcept;
+
+    /**
+     * @brief 获取是否正在使用
+     */
+    bool isUsing() const noexcept;
+
+    /**
+     * @brief 设置是否正在使用
+     */
+    void setUsing(bool is_using) noexcept;
 
     /**
      * @brief 获取空闲内存块数量
@@ -158,13 +169,13 @@ public:
     using iterator = SpanListIterator;
 
 private:
-    Span * _Head;                       // 虚拟头节点
-    std::recursive_mutex _Mutex;        // 链表递归锁
+    Span _Head;                         // 虚拟头节点
+    std::mutex _Mutex;                  // 链表递归锁
 
 public:
     SpanList();
 
-    ~SpanList();
+    ~SpanList() = default;
 
 public:
     /**
@@ -195,33 +206,33 @@ public:
     /**
      * @brief 将页段插入到头部
      */
-    void push_front(Span * span);
-
-    /**
-     * @brief 将页段插入到尾部
-     */
-    void push_back(Span * span);
+    void push_front(Span * span) noexcept;
 
     /**
      * @brief 从头部删除页段
      */
-    void pop_front();
-
-    /**
-     * @brief 从尾部删除页段
-     */
-    void pop_back();
+    void pop_front() noexcept;
 
     /**
      * @brief 删除指定页段
      * @param span 要删除的页段
      */
-    void erase(Span * span);
+    void erase(Span * span) noexcept;
 
     /**
      * @brief 获取链表锁
      */
-    std::recursive_mutex & getMutex();
+    std::mutex & getMutex() noexcept;
+
+    /**
+     * @brief 上锁
+     */
+    void lock() noexcept;
+
+    /**
+     * @brief 解锁
+     */
+    void unlock() noexcept;
 };
 
 } // namespace WW
