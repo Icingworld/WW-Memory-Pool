@@ -1,3 +1,14 @@
+# platform_test.cpp
+add_executable(platform_test
+    src/platform_test.cpp
+)
+
+target_link_libraries(platform_test PRIVATE
+    WW::memory
+    GTest::gtest
+    GTest::gtest_main
+)
+
 # pagecache_test.cpp
 add_executable(pagecache_test
     src/pagecache_test.cpp
