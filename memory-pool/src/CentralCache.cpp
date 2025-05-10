@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include <Size.h>
+
 namespace WW
 {
 
@@ -18,15 +20,16 @@ CentralCache & CentralCache::getCentralCache()
 
 FreeObject * CentralCache::fetchRange(size_type size, size_type count)
 {
-    size_type index = sizeToIndex(size);
+    size_type index = Size::sizeToIndex(size);
 
     // 锁住index对应链表
-    // std::unique_lock<std::mutex> lock(_Spans[index].getMutex());
-    std::unique_lock<std::mutex> lock(_Mutex);
+    _Spans[index].lock();
 
     // 获取一个非空的空闲页
     Span * span = getFreeSpan(size);
     if (span == nullptr) {
+        _Spans[index].unlock();
+        
         return nullptr;
     }
 
@@ -45,16 +48,17 @@ FreeObject * CentralCache::fetchRange(size_type size, size_type count)
         }
     }
 
+    _Spans[index].unlock();
+
     return head;
 }
 
 void CentralCache::returnRange(size_type size, FreeObject * free_object)
 {
-    size_type index = sizeToIndex(size);
+    size_type index = Size::sizeToIndex(size);
 
     // 锁住index对应链表
-    // std::unique_lock<std::mutex> lock(_Spans[index].getMutex());
-    std::unique_lock<std::mutex> lock(_Mutex);
+    _Spans[index].lock();
 
     // 依次归还空闲内存块
     while (free_object != nullptr) {
@@ -63,7 +67,9 @@ void CentralCache::returnRange(size_type size, FreeObject * free_object)
         // 查找该内存块属于哪个页段
         void * ptr = reinterpret_cast<void *>(free_object);
 
+        _Spans[index].unlock();
         Span * span = PageCache::getPageCache().objectToSpan(ptr);
+        _Spans[index].lock();
 
         // 没找到则跳过，这种情况不应该出现
         if (span == nullptr) {
@@ -82,34 +88,21 @@ void CentralCache::returnRange(size_type size, FreeObject * free_object)
             span->getFreeList()->clear();
 
             // 归还页缓存
+            _Spans[index].unlock();
             PageCache::getPageCache().returnSpan(span);
+            _Spans[index].lock();
         }
 
         // 向后移动
         free_object = next;
     }
-}
 
-size_type CentralCache::sizeToIndex(size_type size) noexcept
-{
-    if (size <= 128) {
-        return (size + 8 - 1) / 8 - 1;
-    } else if (size <= 1024) {
-        return 16 + (size - 128 + 16 - 1) / 16 - 1;
-    } else if (size <= 8192) {
-        return 16 + 56 + (size - 1024 + 128 - 1) / 128 - 1;
-    } else if (size <= 65536) {
-        return 16 + 56 + 56 + (size - 8192 + 1024 - 1) / 1024 - 1;
-    } else if (size <= 256 * 1024) {
-        return 16 + 56 + 56 + 56 + (size - 65536 + 8192 - 1) / 8192 - 1;
-    } else {
-        return 0;
-    }
+    _Spans[index].unlock();
 }
 
 Span * CentralCache::getFreeSpan(size_type size)
 {
-    size_type index = sizeToIndex(size);
+    size_type index = Size::sizeToIndex(size);
 
     for (auto it = _Spans[index].begin(); it != _Spans[index].end(); ++it) {
         // 遍历链表，查看是否有已经切过的页
@@ -117,6 +110,8 @@ Span * CentralCache::getFreeSpan(size_type size)
             return &*it;
         }
     }
+
+    _Spans[index].unlock();
 
     // 没找到空闲的页段，需要向页缓存申请
     // 计算出应该申请多少页的页段
@@ -156,6 +151,7 @@ Span * CentralCache::getFreeSpan(size_type size)
     }
 
     // 将页段挂到链表上
+    _Spans[index].lock();
     _Spans[index].push_front(span);
 
     return span;
