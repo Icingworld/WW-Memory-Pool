@@ -9,7 +9,6 @@ Span::Span()
     , _Prev(nullptr)
     , _Next(nullptr)
     , _Page_count(0)
-    , _Is_using(false)
     , _Used(0)
 {
 }
@@ -52,16 +51,6 @@ Span * Span::next() const noexcept
 void Span::setNext(Span * next) noexcept
 {
     _Next = next;
-}
-
-bool Span::isUsing() const noexcept
-{
-    return _Is_using;
-}
-
-void Span::setUsing(bool is_using) noexcept
-{
-    _Is_using = is_using;
 }
 
 size_type Span::used() const noexcept
@@ -195,11 +184,6 @@ void SpanList::erase(Span * span) noexcept
 bool SpanList::empty() const noexcept
 {
     return (_Head.next() == &_Head);
-}
-
-std::mutex & SpanList::getMutex() noexcept
-{
-    return _Mutex;
 }
 
 void SpanList::lock() noexcept

@@ -19,7 +19,6 @@ private:
     Span * _Prev;                   // 前一个页段
     Span * _Next;                   // 后一个页段
     size_type _Page_count;          // 页数
-    bool _Is_using;                 // 是否正在使用
     size_type _Used;                // 已使用的内存块数
 
 public:
@@ -67,16 +66,6 @@ public:
      * @brief 设置下一个页段
      */
     void setNext(Span * next) noexcept;
-
-    /**
-     * @brief 获取是否正在使用
-     */
-    bool isUsing() const noexcept;
-
-    /**
-     * @brief 设置是否正在使用
-     */
-    void setUsing(bool is_using) noexcept;
 
     /**
      * @brief 获取空闲内存块数量
@@ -218,11 +207,6 @@ public:
      * @param span 要删除的页段
      */
     void erase(Span * span) noexcept;
-
-    /**
-     * @brief 获取链表锁
-     */
-    std::mutex & getMutex() noexcept;
 
     /**
      * @brief 上锁

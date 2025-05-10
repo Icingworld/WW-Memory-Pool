@@ -1,5 +1,7 @@
 #include "ThreadCache.h"
 
+#include <Size.h>
+
 namespace WW
 {
 
@@ -36,9 +38,9 @@ void * ThreadCache::allocate(size_type size) noexcept
     }
 
     // 获取对齐后的大小
-    size_type round_size = roundUp(size);
+    size_type round_size = Size::roundUp(size);
     // 找到所在的索引
-    size_type index = sizeToIndex(round_size);
+    size_type index = Size::sizeToIndex(round_size);
 
     if (_Free_lists[index].empty()) {
         // 没有这种内存块，需要申请
@@ -64,9 +66,9 @@ void ThreadCache::deallocate(void * ptr, size_type size) noexcept
     }
 
     // 获取对齐后的大小
-    size_type round_size = roundUp(size);
+    size_type round_size = Size::roundUp(size);
     // 找到所在的索引
-    size_type index = sizeToIndex(round_size);
+    size_type index = Size::sizeToIndex(round_size);
     // 把内存插入自由表
     FreeObject * obj = reinterpret_cast<FreeObject *>(ptr);
     _Free_lists[index].push_front(obj);
@@ -77,42 +79,10 @@ void ThreadCache::deallocate(void * ptr, size_type size) noexcept
     }
 }
 
-size_type ThreadCache::roundUp(size_type size) const noexcept
-{
-    if (size <= 128) {
-        return (size + 8 - 1) & ~(8 - 1);
-    } else if (size <= 1024) {
-        return (size + 16 - 1) & ~(16 - 1);
-    } else if (size <= 8192) {
-        return (size + 128 - 1) & ~(128 - 1);
-    } else if (size <= 65536) {
-        return (size + 1024 - 1) & ~(1024 - 1);
-    } else {
-        return (size + 8192 - 1) & ~(8192 - 1);
-    }
-}
-
-size_type ThreadCache::sizeToIndex(size_type size) const noexcept
-{
-    if (size <= 128) {
-        return (size + 8 - 1) / 8 - 1;
-    } else if (size <= 1024) {
-        return 16 + (size - 128 + 16 - 1) / 16 - 1;
-    } else if (size <= 8192) {
-        return 16 + 56 + (size - 1024 + 128 - 1) / 128 - 1;
-    } else if (size <= 65536) {
-        return 16 + 56 + 56 + (size - 8192 + 1024 - 1) / 1024 - 1;
-    } else if (size <= 256 * 1024) {
-        return 16 + 56 + 56 + 56 + (size - 65536 + 8192 - 1) / 8192 - 1;
-    } else {
-        return 0;
-    }
-}
-
 bool ThreadCache::shouldReturn(size_type index) const noexcept
 {
     // 超过一次申请的最大数量，归还一部分
-    if (_Free_lists[index].size() >= _Free_lists[index].max_size()) {
+    if (_Free_lists[index].size() >= _Free_lists[index].max_size() * 2) {
         return true;
     }
 
@@ -122,7 +92,7 @@ bool ThreadCache::shouldReturn(size_type index) const noexcept
 void ThreadCache::fetchFromCentralCache(size_type size) noexcept
 {
     // 每次申请按照最大数量申请，并且提升最大数量
-    size_type index = sizeToIndex(size);
+    size_type index = Size::sizeToIndex(size);
     size_type count = _Free_lists[index].max_size();
     if (count > MAX_BLOCK_NUM) {
         count = MAX_BLOCK_NUM;
@@ -152,7 +122,7 @@ void ThreadCache::returnToCentralCache(size_type index, size_type nums) noexcept
         head = obj;
     }
 
-    CentralCache::getCentralCache().returnRange(index, head);
+    CentralCache::getCentralCache().returnRange(Size::indexToSize(index), head);
 }
 
 } // namespace WW

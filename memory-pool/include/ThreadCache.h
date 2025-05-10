@@ -45,16 +45,6 @@ public:
 
 private:
     /**
-     * @brief 将内存大小向上取整
-     */
-    size_type roundUp(size_type size) const noexcept;
-
-    /**
-     * @brief 将大小转换为索引
-     */
-    size_type sizeToIndex(size_type size) const noexcept;
-
-    /**
      * @brief 判断是否需要归还给中心缓存
      * @param index 索引
      */

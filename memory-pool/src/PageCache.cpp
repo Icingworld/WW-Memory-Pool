@@ -18,6 +18,7 @@ PageCache::PageCache()
 PageCache::~PageCache()
 {
     std::lock_guard<std::mutex> lock(_Mutex);
+    
     // 释放所有页段
     for (size_type i = 0; i < MAX_PAGE_NUM; ++i) {
         while (!_Spans[i].empty()) {

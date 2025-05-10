@@ -47,11 +47,6 @@ public:
 
 private:
     /**
-     * @brief 内存块大小转换为数组索引
-     */
-    static size_type sizeToIndex(size_type size) noexcept;
-
-    /**
      * @brief 获取一个空闲的页段
      * @param size 内存块大小
      * @return 成功时返回`Span *`，失败时返回`nullptr`
