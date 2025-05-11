@@ -31,7 +31,7 @@ private:
 
 public:
     allocator()
-        : thread_cache(WW::ThreadCache::getThreadCache())
+        : thread_cache(WW::ThreadCache::get_thread_cache())
     {
     }
 

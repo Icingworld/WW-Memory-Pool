@@ -7,7 +7,7 @@
 class ThreadCacheTest : public testing::Test
 {
 public:
-    WW::ThreadCache & thread_cache = WW::ThreadCache::getThreadCache();
+    WW::ThreadCache & thread_cache = WW::ThreadCache::get_thread_cache();
 };
 
 struct LargeObject {
