@@ -1,0 +1,1670 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" width="1200" height="486" onload="init(evt)" viewBox="0 0 1200 486" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<!-- Flame graph stack visualization. See https://github.com/brendangregg/FlameGraph for latest version, and http://www.brendangregg.com/flamegraphs.html for examples. -->
+<!-- NOTES:  -->
+<defs >
+	<linearGradient id="background" y1="0" y2="1" x1="0" x2="0" >
+		<stop stop-color="#eeeeee" offset="5%" />
+		<stop stop-color="#eeeeb0" offset="95%" />
+	</linearGradient>
+</defs>
+<style type="text/css">
+	.func_g:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+</style>
+<script type="text/ecmascript">
+<![CDATA[
+	var details, searchbtn, matchedtxt, svg;
+	function init(evt) {
+		details = document.getElementById("details").firstChild;
+		searchbtn = document.getElementById("search");
+		matchedtxt = document.getElementById("matched");
+		svg = document.getElementsByTagName("svg")[0];
+		searching = 0;
+	}
+
+	// mouse-over for info
+	function s(node) {		// show
+		info = g_to_text(node);
+		details.nodeValue = "Function: " + info;
+	}
+	function c() {			// clear
+		details.nodeValue = ' ';
+	}
+
+	// ctrl-F for search
+	window.addEventListener("keydown",function (e) {
+		if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+			e.preventDefault();
+			search_prompt();
+		}
+	})
+
+	// functions
+	function find_child(parent, name, attr) {
+		var children = parent.childNodes;
+		for (var i=0; i<children.length;i++) {
+			if (children[i].tagName == name)
+				return (attr != undefined) ? children[i].attributes[attr].value : children[i];
+		}
+		return;
+	}
+	function orig_save(e, attr, val) {
+		if (e.attributes["_orig_"+attr] != undefined) return;
+		if (e.attributes[attr] == undefined) return;
+		if (val == undefined) val = e.attributes[attr].value;
+		e.setAttribute("_orig_"+attr, val);
+	}
+	function orig_load(e, attr) {
+		if (e.attributes["_orig_"+attr] == undefined) return;
+		e.attributes[attr].value = e.attributes["_orig_"+attr].value;
+		e.removeAttribute("_orig_"+attr);
+	}
+	function g_to_text(e) {
+		var text = find_child(e, "title").firstChild.nodeValue;
+		return (text)
+	}
+	function g_to_func(e) {
+		var func = g_to_text(e);
+		// if there's any manipulation we want to do to the function
+		// name before it's searched, do it here before returning.
+		return (func);
+	}
+	function update_text(e) {
+		var r = find_child(e, "rect");
+		var t = find_child(e, "text");
+		var w = parseFloat(r.attributes["width"].value) -3;
+		var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+		t.attributes["x"].value = parseFloat(r.attributes["x"].value) +3;
+
+		// Smaller than this size won't fit anything
+		if (w < 2*12*0.59) {
+			t.textContent = "";
+			return;
+		}
+
+		t.textContent = txt;
+		// Fit in full text width
+		if (/^ *$/.test(txt) || t.getSubStringLength(0, txt.length) < w)
+			return;
+
+		for (var x=txt.length-2; x>0; x--) {
+			if (t.getSubStringLength(0, x+2) <= w) {
+				t.textContent = txt.substring(0,x) + "..";
+				return;
+			}
+		}
+		t.textContent = "";
+	}
+
+	// zoom
+	function zoom_reset(e) {
+		if (e.attributes != undefined) {
+			orig_load(e, "x");
+			orig_load(e, "width");
+		}
+		if (e.childNodes == undefined) return;
+		for(var i=0, c=e.childNodes; i<c.length; i++) {
+			zoom_reset(c[i]);
+		}
+	}
+	function zoom_child(e, x, ratio) {
+		if (e.attributes != undefined) {
+			if (e.attributes["x"] != undefined) {
+				orig_save(e, "x");
+				e.attributes["x"].value = (parseFloat(e.attributes["x"].value) - x - 10) * ratio + 10;
+				if(e.tagName == "text") e.attributes["x"].value = find_child(e.parentNode, "rect", "x") + 3;
+			}
+			if (e.attributes["width"] != undefined) {
+				orig_save(e, "width");
+				e.attributes["width"].value = parseFloat(e.attributes["width"].value) * ratio;
+			}
+		}
+
+		if (e.childNodes == undefined) return;
+		for(var i=0, c=e.childNodes; i<c.length; i++) {
+			zoom_child(c[i], x-10, ratio);
+		}
+	}
+	function zoom_parent(e) {
+		if (e.attributes) {
+			if (e.attributes["x"] != undefined) {
+				orig_save(e, "x");
+				e.attributes["x"].value = 10;
+			}
+			if (e.attributes["width"] != undefined) {
+				orig_save(e, "width");
+				e.attributes["width"].value = parseInt(svg.width.baseVal.value) - (10*2);
+			}
+		}
+		if (e.childNodes == undefined) return;
+		for(var i=0, c=e.childNodes; i<c.length; i++) {
+			zoom_parent(c[i]);
+		}
+	}
+	function zoom(node) {
+		var attr = find_child(node, "rect").attributes;
+		var width = parseFloat(attr["width"].value);
+		var xmin = parseFloat(attr["x"].value);
+		var xmax = parseFloat(xmin + width);
+		var ymin = parseFloat(attr["y"].value);
+		var ratio = (svg.width.baseVal.value - 2*10) / width;
+
+		// XXX: Workaround for JavaScript float issues (fix me)
+		var fudge = 0.0001;
+
+		var unzoombtn = document.getElementById("unzoom");
+		unzoombtn.style["opacity"] = "1.0";
+
+		var el = document.getElementsByTagName("g");
+		for(var i=0;i<el.length;i++){
+			var e = el[i];
+			var a = find_child(e, "rect").attributes;
+			var ex = parseFloat(a["x"].value);
+			var ew = parseFloat(a["width"].value);
+			// Is it an ancestor
+			if (0 == 0) {
+				var upstack = parseFloat(a["y"].value) > ymin;
+			} else {
+				var upstack = parseFloat(a["y"].value) < ymin;
+			}
+			if (upstack) {
+				// Direct ancestor
+				if (ex <= xmin && (ex+ew+fudge) >= xmax) {
+					e.style["opacity"] = "0.5";
+					zoom_parent(e);
+					e.onclick = function(e){unzoom(); zoom(this);};
+					update_text(e);
+				}
+				// not in current path
+				else
+					e.style["display"] = "none";
+			}
+			// Children maybe
+			else {
+				// no common path
+				if (ex < xmin || ex + fudge >= xmax) {
+					e.style["display"] = "none";
+				}
+				else {
+					zoom_child(e, xmin, ratio);
+					e.onclick = function(e){zoom(this);};
+					update_text(e);
+				}
+			}
+		}
+	}
+	function unzoom() {
+		var unzoombtn = document.getElementById("unzoom");
+		unzoombtn.style["opacity"] = "0.0";
+
+		var el = document.getElementsByTagName("g");
+		for(i=0;i<el.length;i++) {
+			el[i].style["display"] = "block";
+			el[i].style["opacity"] = "1";
+			zoom_reset(el[i]);
+			update_text(el[i]);
+		}
+	}
+
+	// search
+	function reset_search() {
+		var el = document.getElementsByTagName("rect");
+		for (var i=0; i < el.length; i++) {
+			orig_load(el[i], "fill")
+		}
+	}
+	function search_prompt() {
+		if (!searching) {
+			var term = prompt("Enter a search term (regexp " +
+			    "allowed, eg: ^ext4_)", "");
+			if (term != null) {
+				search(term)
+			}
+		} else {
+			reset_search();
+			searching = 0;
+			searchbtn.style["opacity"] = "0.1";
+			searchbtn.firstChild.nodeValue = "Search"
+			matchedtxt.style["opacity"] = "0.0";
+			matchedtxt.firstChild.nodeValue = ""
+		}
+	}
+	function search(term) {
+		var re = new RegExp(term);
+		var el = document.getElementsByTagName("g");
+		var matches = new Object();
+		var maxwidth = 0;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			if (e.attributes["class"].value != "func_g")
+				continue;
+			var func = g_to_func(e);
+			var rect = find_child(e, "rect");
+			if (rect == null) {
+				// the rect might be wrapped in an anchor
+				// if nameattr href is being used
+				if (rect = find_child(e, "a")) {
+				    rect = find_child(r, "rect");
+				}
+			}
+			if (func == null || rect == null)
+				continue;
+
+			// Save max width. Only works as we have a root frame
+			var w = parseFloat(rect.attributes["width"].value);
+			if (w > maxwidth)
+				maxwidth = w;
+
+			if (func.match(re)) {
+				// highlight
+				var x = parseFloat(rect.attributes["x"].value);
+				orig_save(rect, "fill");
+				rect.attributes["fill"].value =
+				    "rgb(230,0,230)";
+
+				// remember matches
+				if (matches[x] == undefined) {
+					matches[x] = w;
+				} else {
+					if (w > matches[x]) {
+						// overwrite with parent
+						matches[x] = w;
+					}
+				}
+				searching = 1;
+			}
+		}
+		if (!searching)
+			return;
+
+		searchbtn.style["opacity"] = "1.0";
+		searchbtn.firstChild.nodeValue = "Reset Search"
+
+		// calculate percent matched, excluding vertical overlap
+		var count = 0;
+		var lastx = -1;
+		var lastw = 0;
+		var keys = Array();
+		for (k in matches) {
+			if (matches.hasOwnProperty(k))
+				keys.push(k);
+		}
+		// sort the matched frames by their x location
+		// ascending, then width descending
+		keys.sort(function(a, b){
+			return a - b;
+		});
+		// Step through frames saving only the biggest bottom-up frames
+		// thanks to the sort order. This relies on the tree property
+		// where children are always smaller than their parents.
+		var fudge = 0.0001;	// JavaScript floating point
+		for (var k in keys) {
+			var x = parseFloat(keys[k]);
+			var w = matches[keys[k]];
+			if (x >= lastx + lastw - fudge) {
+				count += w;
+				lastx = x;
+				lastw = w;
+			}
+		}
+		// display matched percent
+		matchedtxt.style["opacity"] = "1.0";
+		pct = 100 * count / maxwidth;
+		if (pct == 100)
+			pct = "100"
+		else
+			pct = pct.toFixed(1)
+		matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+	}
+	function searchover(e) {
+		searchbtn.style["opacity"] = "1.0";
+	}
+	function searchout(e) {
+		if (searching) {
+			searchbtn.style["opacity"] = "1.0";
+		} else {
+			searchbtn.style["opacity"] = "0.1";
+		}
+	}
+]]>
+</script>
+<rect x="0.0" y="0" width="1200.0" height="486.0" fill="url(#background)"  />
+<text text-anchor="middle" x="600.00" y="24" font-size="17" font-family="Verdana" fill="rgb(0,0,0)"  >Flame Graph</text>
+<text text-anchor="" x="10.00" y="469" font-size="12" font-family="Verdana" fill="rgb(0,0,0)" id="details" > </text>
+<text text-anchor="" x="10.00" y="24" font-size="12" font-family="Verdana" fill="rgb(0,0,0)" id="unzoom" onclick="unzoom()" style="opacity:0.0;cursor:pointer" >Reset Zoom</text>
+<text text-anchor="" x="1090.00" y="24" font-size="12" font-family="Verdana" fill="rgb(0,0,0)" id="search" onmouseover="searchover()" onmouseout="searchout()" onclick="search_prompt()" style="opacity:0.1;cursor:pointer" >Search</text>
+<text text-anchor="" x="1090.00" y="469" font-size="12" font-family="Verdana" fill="rgb(0,0,0)" id="matched" > </text>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>smp_call_function_many_cond (1 samples, 0.21%)</title><rect x="1185.1" y="181" width="2.4" height="15.0" fill="rgb(251,89,0)" rx="2" ry="2" />
+<text text-anchor="" x="1188.05" y="191.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>tlb_finish_mmu (1 samples, 0.21%)</title><rect x="1185.1" y="245" width="2.4" height="15.0" fill="rgb(249,68,23)" rx="2" ry="2" />
+<text text-anchor="" x="1188.05" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::setNext (1 samples, 0.21%)</title><rect x="687.8" y="213" width="2.5" height="15.0" fill="rgb(205,17,43)" rx="2" ry="2" />
+<text text-anchor="" x="690.82" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>entry_SYSCALL_64_after_hwframe (4 samples, 0.84%)</title><rect x="393.4" y="165" width="9.9" height="15.0" fill="rgb(244,179,3)" rx="2" ry="2" />
+<text text-anchor="" x="396.44" y="175.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_futex (1 samples, 0.21%)</title><rect x="856.0" y="101" width="2.5" height="15.0" fill="rgb(219,160,40)" rx="2" ry="2" />
+<text text-anchor="" x="859.04" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::setNext (1 samples, 0.21%)</title><rect x="183.2" y="245" width="2.4" height="15.0" fill="rgb(236,155,5)" rx="2" ry="2" />
+<text text-anchor="" x="186.17" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::vector&lt;TestCase&lt;512ul&gt;*, std::allocator&lt;TestCase&lt;512ul&gt;*&gt; &gt;::operator[] (4 samples, 0.84%)</title><rect x="1021.8" y="293" width="9.9" height="15.0" fill="rgb(254,113,27)" rx="2" ry="2" />
+<text text-anchor="" x="1024.78" y="303.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>on_each_cpu_cond_mask (1 samples, 0.21%)</title><rect x="1185.1" y="197" width="2.4" height="15.0" fill="rgb(243,97,52)" rx="2" ry="2" />
+<text text-anchor="" x="1188.05" y="207.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::__array_traits&lt;WW::FreeList, 208ul&gt;::_S_ref (3 samples, 0.63%)</title><rect x="702.7" y="261" width="7.4" height="15.0" fill="rgb(252,149,14)" rx="2" ry="2" />
+<text text-anchor="" x="705.66" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>x64_sys_call (3 samples, 0.63%)</title><rect x="1177.6" y="357" width="7.5" height="15.0" fill="rgb(236,178,3)" rx="2" ry="2" />
+<text text-anchor="" x="1180.63" y="367.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::mutex::unlock (2 samples, 0.42%)</title><rect x="462.7" y="197" width="5.0" height="15.0" fill="rgb(223,144,6)" rx="2" ry="2" />
+<text text-anchor="" x="465.70" y="207.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::setNext (1 samples, 0.21%)</title><rect x="494.9" y="245" width="2.4" height="15.0" fill="rgb(242,144,34)" rx="2" ry="2" />
+<text text-anchor="" x="497.86" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>irq_exit_rcu (1 samples, 0.21%)</title><rect x="1182.6" y="229" width="2.5" height="15.0" fill="rgb(223,216,33)" rx="2" ry="2" />
+<text text-anchor="" x="1185.58" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__x64_sys_clone3 (3 samples, 0.63%)</title><rect x="1177.6" y="341" width="7.5" height="15.0" fill="rgb(252,51,16)" rx="2" ry="2" />
+<text text-anchor="" x="1180.63" y="351.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::Span::used (1 samples, 0.21%)</title><rect x="497.3" y="245" width="2.5" height="15.0" fill="rgb(214,51,7)" rx="2" ry="2" />
+<text text-anchor="" x="500.34" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>pthread_mutex_lock@@GLIBC_2.2.5 (2 samples, 0.42%)</title><rect x="940.1" y="197" width="5.0" height="15.0" fill="rgb(210,184,26)" rx="2" ry="2" />
+<text text-anchor="" x="943.15" y="207.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::allocator_traits&lt;std::allocator&lt;TestCase&lt;512ul&gt;*&gt; &gt;::allocate (1 samples, 0.21%)</title><rect x="1031.7" y="261" width="2.5" height="15.0" fill="rgb(233,78,32)" rx="2" ry="2" />
+<text text-anchor="" x="1034.68" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::__array_traits&lt;WW::FreeList, 208ul&gt;::_S_ref (1 samples, 0.21%)</title><rect x="977.3" y="245" width="2.4" height="15.0" fill="rgb(205,213,54)" rx="2" ry="2" />
+<text text-anchor="" x="980.25" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::setNext (4 samples, 0.84%)</title><rect x="344.0" y="245" width="9.9" height="15.0" fill="rgb(239,74,52)" rx="2" ry="2" />
+<text text-anchor="" x="346.96" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__x64_sys_futex (1 samples, 0.21%)</title><rect x="856.0" y="117" width="2.5" height="15.0" fill="rgb(206,173,23)" rx="2" ry="2" />
+<text text-anchor="" x="859.04" y="127.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::next (2 samples, 0.42%)</title><rect x="339.0" y="245" width="5.0" height="15.0" fill="rgb(216,111,46)" rx="2" ry="2" />
+<text text-anchor="" x="342.01" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::Size::roundUp (4 samples, 0.84%)</title><rect x="358.8" y="261" width="9.9" height="15.0" fill="rgb(242,61,17)" rx="2" ry="2" />
+<text text-anchor="" x="361.81" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::CentralCache::returnRange (46 samples, 9.64%)</title><rect x="376.1" y="245" width="113.8" height="15.0" fill="rgb(227,6,17)" rx="2" ry="2" />
+<text text-anchor="" x="379.12" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >WW::CentralCac..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::setNext (3 samples, 0.63%)</title><rect x="801.6" y="261" width="7.4" height="15.0" fill="rgb(225,83,15)" rx="2" ry="2" />
+<text text-anchor="" x="804.61" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>void std::allocator_traits&lt;std::allocator&lt;TestCase&lt;1024ul&gt;*&gt; &gt;::construct&lt;TestCase&lt;1024ul&gt;*, TestCase&lt;1024ul&gt;*&amp;&gt; (2 samples, 0.42%)</title><rect x="1034.2" y="293" width="4.9" height="15.0" fill="rgb(249,11,23)" rx="2" ry="2" />
+<text text-anchor="" x="1037.15" y="303.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::next (5 samples, 1.05%)</title><rect x="185.6" y="261" width="12.4" height="15.0" fill="rgb(212,31,52)" rx="2" ry="2" />
+<text text-anchor="" x="188.64" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__call_tls_dtors (3 samples, 0.63%)</title><rect x="1165.3" y="389" width="7.4" height="15.0" fill="rgb(231,189,22)" rx="2" ry="2" />
+<text text-anchor="" x="1168.26" y="399.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::next (1 samples, 0.21%)</title><rect x="828.8" y="229" width="2.5" height="15.0" fill="rgb(251,211,52)" rx="2" ry="2" />
+<text text-anchor="" x="831.83" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::__array_traits&lt;WW::FreeList, 208ul&gt;::_S_ref (1 samples, 0.21%)</title><rect x="1011.9" y="245" width="2.5" height="15.0" fill="rgb(240,201,16)" rx="2" ry="2" />
+<text text-anchor="" x="1014.89" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>try_to_wake_up (2 samples, 0.42%)</title><rect x="462.7" y="53" width="5.0" height="15.0" fill="rgb(216,138,46)" rx="2" ry="2" />
+<text text-anchor="" x="465.70" y="63.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>allocator&lt;TestCase&lt;1024ul&gt; &gt;::max_size (2 samples, 0.42%)</title><rect x="571.6" y="293" width="4.9" height="15.0" fill="rgb(242,225,51)" rx="2" ry="2" />
+<text text-anchor="" x="574.55" y="303.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::Size::roundUp (2 samples, 0.42%)</title><rect x="675.5" y="261" width="4.9" height="15.0" fill="rgb(249,32,33)" rx="2" ry="2" />
+<text text-anchor="" x="678.45" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>allocator&lt;TestCase&lt;1024ul&gt; &gt;::deallocate (2 samples, 0.42%)</title><rect x="12.5" y="309" width="4.9" height="15.0" fill="rgb(211,179,6)" rx="2" ry="2" />
+<text text-anchor="" x="15.47" y="319.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>irqentry_exit_to_user_mode (1 samples, 0.21%)</title><rect x="1167.7" y="213" width="2.5" height="15.0" fill="rgb(216,164,20)" rx="2" ry="2" />
+<text text-anchor="" x="1170.74" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>allocator&lt;TestCase&lt;512ul&gt; &gt;::allocate (72 samples, 15.09%)</title><rect x="576.5" y="293" width="178.1" height="15.0" fill="rgb(223,23,9)" rx="2" ry="2" />
+<text text-anchor="" x="579.50" y="303.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >allocator&lt;TestCase&lt;512u..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::setNext (1 samples, 0.21%)</title><rect x="198.0" y="261" width="2.5" height="15.0" fill="rgb(243,217,5)" rx="2" ry="2" />
+<text text-anchor="" x="201.01" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>try_to_wake_up (8 samples, 1.68%)</title><rect x="420.6" y="53" width="19.8" height="15.0" fill="rgb(215,180,30)" rx="2" ry="2" />
+<text text-anchor="" x="423.65" y="63.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>allocator&lt;TestCase&lt;1024ul&gt; &gt;::deallocate (117 samples, 24.53%)</title><rect x="282.1" y="293" width="289.5" height="15.0" fill="rgb(224,124,10)" rx="2" ry="2" />
+<text text-anchor="" x="285.12" y="303.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >allocator&lt;TestCase&lt;1024ul&gt; &gt;::deallocate</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::_Rb_tree&lt;unsigned long, std::pair&lt;unsigned long const, WW::Span*&gt;, std::_Select1st&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt;, std::less&lt;unsigned long&gt;, std::allocator&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt; &gt;::_S_key (1 samples, 0.21%)</title><rect x="925.3" y="181" width="2.5" height="15.0" fill="rgb(233,11,22)" rx="2" ry="2" />
+<text text-anchor="" x="928.30" y="191.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>allocator&lt;TestCase&lt;512ul&gt; &gt;::deallocate (106 samples, 22.22%)</title><rect x="754.6" y="293" width="262.2" height="15.0" fill="rgb(253,39,13)" rx="2" ry="2" />
+<text text-anchor="" x="757.61" y="303.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >allocator&lt;TestCase&lt;512ul&gt; &gt;::deallo..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>_raw_spin_unlock_irqrestore (3 samples, 0.63%)</title><rect x="1177.6" y="277" width="7.5" height="15.0" fill="rgb(232,25,46)" rx="2" ry="2" />
+<text text-anchor="" x="1180.63" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::next (1 samples, 0.21%)</title><rect x="952.5" y="229" width="2.5" height="15.0" fill="rgb(227,29,41)" rx="2" ry="2" />
+<text text-anchor="" x="955.52" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::numeric_limits&lt;unsigned long&gt;::max (1 samples, 0.21%)</title><rect x="739.8" y="261" width="2.4" height="15.0" fill="rgb(234,153,11)" rx="2" ry="2" />
+<text text-anchor="" x="742.77" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ksys_mmap_pgoff (1 samples, 0.21%)</title><rect x="1172.7" y="325" width="2.5" height="15.0" fill="rgb(218,35,2)" rx="2" ry="2" />
+<text text-anchor="" x="1175.68" y="335.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::ThreadCache::returnToCentralCache (52 samples, 10.90%)</title><rect x="373.6" y="261" width="128.7" height="15.0" fill="rgb(237,71,20)" rx="2" ry="2" />
+<text text-anchor="" x="376.65" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >WW::ThreadCache:..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>native_flush_tlb_multi (1 samples, 0.21%)</title><rect x="1185.1" y="213" width="2.4" height="15.0" fill="rgb(239,183,40)" rx="2" ry="2" />
+<text text-anchor="" x="1188.05" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>up_write (1 samples, 0.21%)</title><rect x="1172.7" y="293" width="2.5" height="15.0" fill="rgb(244,105,39)" rx="2" ry="2" />
+<text text-anchor="" x="1175.68" y="303.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>entry_SYSCALL_64_after_hwframe (9 samples, 1.89%)</title><rect x="418.2" y="165" width="22.2" height="15.0" fill="rgb(205,54,28)" rx="2" ry="2" />
+<text text-anchor="" x="421.18" y="175.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >e..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::_Rb_tree&lt;unsigned long, std::pair&lt;unsigned long const, WW::Span*&gt;, std::_Select1st&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt;, std::less&lt;unsigned long&gt;, std::allocator&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt; &gt;::_S_left (1 samples, 0.21%)</title><rect x="457.8" y="165" width="2.4" height="15.0" fill="rgb(215,23,22)" rx="2" ry="2" />
+<text text-anchor="" x="460.76" y="175.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::_Rb_tree_decrement (1 samples, 0.21%)</title><rect x="838.7" y="213" width="2.5" height="15.0" fill="rgb(205,172,49)" rx="2" ry="2" />
+<text text-anchor="" x="841.72" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::PageCache::returnSpan (2 samples, 0.42%)</title><rect x="462.7" y="229" width="5.0" height="15.0" fill="rgb(215,119,5)" rx="2" ry="2" />
+<text text-anchor="" x="465.70" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>futex_wake (9 samples, 1.89%)</title><rect x="418.2" y="85" width="22.2" height="15.0" fill="rgb(232,199,21)" rx="2" ry="2" />
+<text text-anchor="" x="421.18" y="95.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >f..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::next (1 samples, 0.21%)</title><rect x="955.0" y="245" width="2.5" height="15.0" fill="rgb(245,122,0)" rx="2" ry="2" />
+<text text-anchor="" x="957.99" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>kernel_clone (3 samples, 0.63%)</title><rect x="1177.6" y="309" width="7.5" height="15.0" fill="rgb(217,214,46)" rx="2" ry="2" />
+<text text-anchor="" x="1180.63" y="319.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::array&lt;WW::SpanList, 208ul&gt;::operator[] (1 samples, 0.21%)</title><rect x="499.8" y="245" width="2.5" height="15.0" fill="rgb(214,151,52)" rx="2" ry="2" />
+<text text-anchor="" x="502.81" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_syscall_64 (2 samples, 0.42%)</title><rect x="1185.1" y="389" width="4.9" height="15.0" fill="rgb(248,110,44)" rx="2" ry="2" />
+<text text-anchor="" x="1188.05" y="399.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::__array_traits&lt;WW::FreeList, 208ul&gt;::_S_ref (2 samples, 0.42%)</title><rect x="559.2" y="245" width="4.9" height="15.0" fill="rgb(232,110,33)" rx="2" ry="2" />
+<text text-anchor="" x="562.18" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>all (477 samples, 100%)</title><rect x="10.0" y="437" width="1180.0" height="15.0" fill="rgb(238,199,8)" rx="2" ry="2" />
+<text text-anchor="" x="13.00" y="447.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sysvec_call_function_single (1 samples, 0.21%)</title><rect x="1167.7" y="245" width="2.5" height="15.0" fill="rgb(253,15,23)" rx="2" ry="2" />
+<text text-anchor="" x="1170.74" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__x64_sys_mmap (1 samples, 0.21%)</title><rect x="1172.7" y="341" width="2.5" height="15.0" fill="rgb(229,103,25)" rx="2" ry="2" />
+<text text-anchor="" x="1175.68" y="351.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::Size::roundUp (3 samples, 0.63%)</title><rect x="809.0" y="261" width="7.5" height="15.0" fill="rgb(253,217,49)" rx="2" ry="2" />
+<text text-anchor="" x="812.04" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::_Vector_base&lt;TestCase&lt;512ul&gt;*, std::allocator&lt;TestCase&lt;512ul&gt;*&gt; &gt;::_M_allocate (1 samples, 0.21%)</title><rect x="1031.7" y="277" width="2.5" height="15.0" fill="rgb(236,1,27)" rx="2" ry="2" />
+<text text-anchor="" x="1034.68" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__do_sys_clone3 (3 samples, 0.63%)</title><rect x="1177.6" y="325" width="7.5" height="15.0" fill="rgb(206,144,38)" rx="2" ry="2" />
+<text text-anchor="" x="1180.63" y="335.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::vector&lt;TestCase&lt;512ul&gt;*, std::allocator&lt;TestCase&lt;512ul&gt;*&gt; &gt;::reserve (1 samples, 0.21%)</title><rect x="1031.7" y="293" width="2.5" height="15.0" fill="rgb(211,196,36)" rx="2" ry="2" />
+<text text-anchor="" x="1034.68" y="303.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>pthread_mutex_lock@plt (1 samples, 0.21%)</title><rect x="945.1" y="197" width="2.5" height="15.0" fill="rgb(250,131,36)" rx="2" ry="2" />
+<text text-anchor="" x="948.09" y="207.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__GI___lll_lock_wake (11 samples, 2.31%)</title><rect x="413.2" y="181" width="27.2" height="15.0" fill="rgb(250,174,23)" rx="2" ry="2" />
+<text text-anchor="" x="416.23" y="191.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >_..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>TestCase&lt;512ul&gt;*&amp; std::forward&lt;TestCase&lt;512ul&gt;*&amp;&gt; (1 samples, 0.21%)</title><rect x="1145.5" y="261" width="2.4" height="15.0" fill="rgb(242,156,49)" rx="2" ry="2" />
+<text text-anchor="" x="1148.47" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::setNext (1 samples, 0.21%)</title><rect x="237.6" y="245" width="2.5" height="15.0" fill="rgb(223,118,30)" rx="2" ry="2" />
+<text text-anchor="" x="240.59" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::_Rb_tree&lt;unsigned long, std::pair&lt;unsigned long const, WW::Span*&gt;, std::_Select1st&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt;, std::less&lt;unsigned long&gt;, std::allocator&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt; &gt;::upper_bound (6 samples, 1.26%)</title><rect x="912.9" y="197" width="14.9" height="15.0" fill="rgb(218,134,33)" rx="2" ry="2" />
+<text text-anchor="" x="915.94" y="207.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_futex (2 samples, 0.42%)</title><rect x="462.7" y="101" width="5.0" height="15.0" fill="rgb(247,195,46)" rx="2" ry="2" />
+<text text-anchor="" x="465.70" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__x64_sys_exit_group (2 samples, 0.42%)</title><rect x="1185.1" y="357" width="4.9" height="15.0" fill="rgb(240,45,20)" rx="2" ry="2" />
+<text text-anchor="" x="1188.05" y="367.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::mutex::unlock (5 samples, 1.05%)</title><rect x="475.1" y="213" width="12.3" height="15.0" fill="rgb(250,222,22)" rx="2" ry="2" />
+<text text-anchor="" x="478.07" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::__array_traits&lt;WW::FreeList, 208ul&gt;::_S_ref (4 samples, 0.84%)</title><rect x="729.9" y="245" width="9.9" height="15.0" fill="rgb(243,110,0)" rx="2" ry="2" />
+<text text-anchor="" x="732.87" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::Size::roundUp (5 samples, 1.05%)</title><rect x="200.5" y="261" width="12.4" height="15.0" fill="rgb(223,89,49)" rx="2" ry="2" />
+<text text-anchor="" x="203.48" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__irq_exit_rcu (1 samples, 0.21%)</title><rect x="1182.6" y="213" width="2.5" height="15.0" fill="rgb(241,56,18)" rx="2" ry="2" />
+<text text-anchor="" x="1185.58" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::map&lt;unsigned long, WW::Span*, std::less&lt;unsigned long&gt;, std::allocator&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt; &gt;::begin (2 samples, 0.42%)</title><rect x="450.3" y="213" width="5.0" height="15.0" fill="rgb(237,1,30)" rx="2" ry="2" />
+<text text-anchor="" x="453.34" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::next (2 samples, 0.42%)</title><rect x="690.3" y="213" width="4.9" height="15.0" fill="rgb(248,165,25)" rx="2" ry="2" />
+<text text-anchor="" x="693.29" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_group_exit (2 samples, 0.42%)</title><rect x="1185.1" y="341" width="4.9" height="15.0" fill="rgb(247,54,13)" rx="2" ry="2" />
+<text text-anchor="" x="1188.05" y="351.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::_Rb_tree&lt;unsigned long, std::pair&lt;unsigned long const, WW::Span*&gt;, std::_Select1st&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt;, std::less&lt;unsigned long&gt;, std::allocator&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt; &gt;::_S_key (2 samples, 0.42%)</title><rect x="912.9" y="165" width="5.0" height="15.0" fill="rgb(205,225,19)" rx="2" ry="2" />
+<text text-anchor="" x="915.94" y="175.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::numeric_limits&lt;unsigned long&gt;::max (1 samples, 0.21%)</title><rect x="279.6" y="277" width="2.5" height="15.0" fill="rgb(239,126,4)" rx="2" ry="2" />
+<text text-anchor="" x="282.64" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>_raw_spin_lock (1 samples, 0.21%)</title><rect x="856.0" y="37" width="2.5" height="15.0" fill="rgb(227,32,1)" rx="2" ry="2" />
+<text text-anchor="" x="859.04" y="47.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::ThreadCache::shouldReturn (17 samples, 3.56%)</title><rect x="959.9" y="261" width="42.1" height="15.0" fill="rgb(237,133,32)" rx="2" ry="2" />
+<text text-anchor="" x="962.94" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >WW:..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>futex_wake (3 samples, 0.63%)</title><rect x="930.3" y="85" width="7.4" height="15.0" fill="rgb(231,153,1)" rx="2" ry="2" />
+<text text-anchor="" x="933.25" y="95.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>clone3 (3 samples, 0.63%)</title><rect x="1177.6" y="405" width="7.5" height="15.0" fill="rgb(246,142,10)" rx="2" ry="2" />
+<text text-anchor="" x="1180.63" y="415.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::PageCache::getPageCache (1 samples, 0.21%)</title><rect x="381.1" y="229" width="2.4" height="15.0" fill="rgb(223,171,47)" rx="2" ry="2" />
+<text text-anchor="" x="384.07" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>x64_sys_call (2 samples, 0.42%)</title><rect x="462.7" y="133" width="5.0" height="15.0" fill="rgb(230,72,51)" rx="2" ry="2" />
+<text text-anchor="" x="465.70" y="143.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::operator== (1 samples, 0.21%)</title><rect x="927.8" y="213" width="2.5" height="15.0" fill="rgb(250,128,0)" rx="2" ry="2" />
+<text text-anchor="" x="930.78" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::Size::sizeToIndex (5 samples, 1.05%)</title><rect x="816.5" y="261" width="12.3" height="15.0" fill="rgb(252,12,20)" rx="2" ry="2" />
+<text text-anchor="" x="819.46" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>void std::vector&lt;TestCase&lt;512ul&gt;*, std::allocator&lt;TestCase&lt;512ul&gt;*&gt; &gt;::emplace_back&lt;TestCase&lt;512ul&gt;*&amp;&gt; (1 samples, 0.21%)</title><rect x="1162.8" y="309" width="2.5" height="15.0" fill="rgb(239,111,18)" rx="2" ry="2" />
+<text text-anchor="" x="1165.79" y="319.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>unmap_page_range (1 samples, 0.21%)</title><rect x="1187.5" y="213" width="2.5" height="15.0" fill="rgb(221,87,54)" rx="2" ry="2" />
+<text text-anchor="" x="1190.53" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__x64_sys_futex (1 samples, 0.21%)</title><rect x="853.6" y="133" width="2.4" height="15.0" fill="rgb(245,175,33)" rx="2" ry="2" />
+<text text-anchor="" x="856.56" y="143.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::next (2 samples, 0.42%)</title><rect x="109.0" y="245" width="4.9" height="15.0" fill="rgb(226,190,12)" rx="2" ry="2" />
+<text text-anchor="" x="111.95" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>_raw_spin_unlock_irqrestore (3 samples, 0.63%)</title><rect x="930.3" y="37" width="7.4" height="15.0" fill="rgb(220,50,48)" rx="2" ry="2" />
+<text text-anchor="" x="933.25" y="47.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::array&lt;WW::FreeList, 208ul&gt;::operator[] (12 samples, 2.52%)</title><rect x="710.1" y="261" width="29.7" height="15.0" fill="rgb(209,124,10)" rx="2" ry="2" />
+<text text-anchor="" x="713.08" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >st..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>x64_sys_call (3 samples, 0.63%)</title><rect x="930.3" y="133" width="7.4" height="15.0" fill="rgb(218,69,14)" rx="2" ry="2" />
+<text text-anchor="" x="933.25" y="143.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeList::pop_front (3 samples, 0.63%)</title><rect x="947.6" y="245" width="7.4" height="15.0" fill="rgb(211,75,12)" rx="2" ry="2" />
+<text text-anchor="" x="950.57" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::less&lt;unsigned long&gt;::operator (1 samples, 0.21%)</title><rect x="922.8" y="165" width="2.5" height="15.0" fill="rgb(254,106,34)" rx="2" ry="2" />
+<text text-anchor="" x="925.83" y="175.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>futex_wake (15 samples, 3.14%)</title><rect x="868.4" y="85" width="37.1" height="15.0" fill="rgb(240,200,22)" rx="2" ry="2" />
+<text text-anchor="" x="871.41" y="95.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >fut..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::_Rb_tree&lt;unsigned long, std::pair&lt;unsigned long const, WW::Span*&gt;, std::_Select1st&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt;, std::less&lt;unsigned long&gt;, std::allocator&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt; &gt;::_M_upper_bound (3 samples, 0.63%)</title><rect x="455.3" y="181" width="7.4" height="15.0" fill="rgb(247,117,52)" rx="2" ry="2" />
+<text text-anchor="" x="458.28" y="191.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::ThreadCache::allocate (57 samples, 11.95%)</title><rect x="598.8" y="277" width="141.0" height="15.0" fill="rgb(226,63,48)" rx="2" ry="2" />
+<text text-anchor="" x="601.76" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >WW::ThreadCache::..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::_Rb_tree&lt;unsigned long, std::pair&lt;unsigned long const, WW::Span*&gt;, std::_Select1st&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt;, std::less&lt;unsigned long&gt;, std::allocator&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt; &gt;::_M_upper_bound (5 samples, 1.05%)</title><rect x="912.9" y="181" width="12.4" height="15.0" fill="rgb(211,70,17)" rx="2" ry="2" />
+<text text-anchor="" x="915.94" y="191.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::mutex::lock (3 samples, 0.63%)</title><rect x="940.1" y="213" width="7.5" height="15.0" fill="rgb(239,172,43)" rx="2" ry="2" />
+<text text-anchor="" x="943.15" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>try_to_wake_up (1 samples, 0.21%)</title><rect x="1172.7" y="245" width="2.5" height="15.0" fill="rgb(213,73,1)" rx="2" ry="2" />
+<text text-anchor="" x="1175.68" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::lock_guard&lt;std::mutex&gt;::~lock_guard (3 samples, 0.63%)</title><rect x="930.3" y="213" width="7.4" height="15.0" fill="rgb(209,35,32)" rx="2" ry="2" />
+<text text-anchor="" x="933.25" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>void std::vector&lt;TestCase&lt;1024ul&gt;*, std::allocator&lt;TestCase&lt;1024ul&gt;*&gt; &gt;::emplace_back&lt;TestCase&lt;1024ul&gt;*&amp;&gt; (2 samples, 0.42%)</title><rect x="1157.8" y="309" width="5.0" height="15.0" fill="rgb(207,165,17)" rx="2" ry="2" />
+<text text-anchor="" x="1160.84" y="319.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::next (2 samples, 0.42%)</title><rect x="220.3" y="213" width="4.9" height="15.0" fill="rgb(210,171,50)" rx="2" ry="2" />
+<text text-anchor="" x="223.27" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>try_to_wake_up (3 samples, 0.63%)</title><rect x="930.3" y="53" width="7.4" height="15.0" fill="rgb(205,46,49)" rx="2" ry="2" />
+<text text-anchor="" x="933.25" y="63.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>unmap_vmas (1 samples, 0.21%)</title><rect x="1187.5" y="245" width="2.5" height="15.0" fill="rgb(214,162,26)" rx="2" ry="2" />
+<text text-anchor="" x="1190.53" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::mutex::lock (3 samples, 0.63%)</title><rect x="467.7" y="213" width="7.4" height="15.0" fill="rgb(235,155,38)" rx="2" ry="2" />
+<text text-anchor="" x="470.65" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>_raw_spin_unlock_irqrestore (1 samples, 0.21%)</title><rect x="1172.7" y="229" width="2.5" height="15.0" fill="rgb(239,12,3)" rx="2" ry="2" />
+<text text-anchor="" x="1175.68" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::Size::sizeToIndex (2 samples, 0.42%)</title><rect x="368.7" y="261" width="4.9" height="15.0" fill="rgb(218,130,35)" rx="2" ry="2" />
+<text text-anchor="" x="371.70" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>x64_sys_call (1 samples, 0.21%)</title><rect x="856.0" y="133" width="2.5" height="15.0" fill="rgb(212,142,21)" rx="2" ry="2" />
+<text text-anchor="" x="859.04" y="143.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>futex_wake (2 samples, 0.42%)</title><rect x="462.7" y="85" width="5.0" height="15.0" fill="rgb(220,170,38)" rx="2" ry="2" />
+<text text-anchor="" x="465.70" y="95.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::ThreadCache::fetchFromCentralCache (8 samples, 1.68%)</title><rect x="682.9" y="261" width="19.8" height="15.0" fill="rgb(237,157,49)" rx="2" ry="2" />
+<text text-anchor="" x="685.87" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::Size::sizeToIndex (1 samples, 0.21%)</title><rect x="596.3" y="277" width="2.5" height="15.0" fill="rgb(210,65,25)" rx="2" ry="2" />
+<text text-anchor="" x="599.29" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>TestCase&lt;512ul&gt;*&amp; std::forward&lt;TestCase&lt;512ul&gt;*&amp;&gt; (1 samples, 0.21%)</title><rect x="1128.2" y="277" width="2.4" height="15.0" fill="rgb(239,185,50)" rx="2" ry="2" />
+<text text-anchor="" x="1131.16" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::_Rb_tree&lt;unsigned long, std::pair&lt;unsigned long const, WW::Span*&gt;, std::_Select1st&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt;, std::less&lt;unsigned long&gt;, std::allocator&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt; &gt;::upper_bound (3 samples, 0.63%)</title><rect x="455.3" y="197" width="7.4" height="15.0" fill="rgb(207,118,43)" rx="2" ry="2" />
+<text text-anchor="" x="458.28" y="207.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::Size::roundUp (1 samples, 0.21%)</title><rect x="84.2" y="277" width="2.5" height="15.0" fill="rgb(243,167,44)" rx="2" ry="2" />
+<text text-anchor="" x="87.21" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::setNext (2 samples, 0.42%)</title><rect x="225.2" y="229" width="5.0" height="15.0" fill="rgb(226,55,12)" rx="2" ry="2" />
+<text text-anchor="" x="228.22" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::_Rb_tree_decrement (1 samples, 0.21%)</title><rect x="386.0" y="213" width="2.5" height="15.0" fill="rgb(217,216,39)" rx="2" ry="2" />
+<text text-anchor="" x="389.02" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::_Rb_tree_iterator&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt;::operator (1 samples, 0.21%)</title><rect x="841.2" y="213" width="2.5" height="15.0" fill="rgb(248,150,2)" rx="2" ry="2" />
+<text text-anchor="" x="844.19" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::PageCache::objectToSpan (32 samples, 6.71%)</title><rect x="383.5" y="229" width="79.2" height="15.0" fill="rgb(245,169,12)" rx="2" ry="2" />
+<text text-anchor="" x="386.54" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >WW::PageC..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>rwsem_wake.isra.0 (1 samples, 0.21%)</title><rect x="1172.7" y="277" width="2.5" height="15.0" fill="rgb(207,79,25)" rx="2" ry="2" />
+<text text-anchor="" x="1175.68" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>_raw_spin_unlock_irqrestore (2 samples, 0.42%)</title><rect x="462.7" y="37" width="5.0" height="15.0" fill="rgb(208,115,54)" rx="2" ry="2" />
+<text text-anchor="" x="465.70" y="47.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeList::pop_front (27 samples, 5.66%)</title><rect x="118.8" y="261" width="66.8" height="15.0" fill="rgb(252,148,11)" rx="2" ry="2" />
+<text text-anchor="" x="121.85" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >WW::Fre..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>irqentry_exit (1 samples, 0.21%)</title><rect x="1167.7" y="229" width="2.5" height="15.0" fill="rgb(248,162,22)" rx="2" ry="2" />
+<text text-anchor="" x="1170.74" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_syscall_64 (18 samples, 3.77%)</title><rect x="861.0" y="149" width="44.5" height="15.0" fill="rgb(218,43,27)" rx="2" ry="2" />
+<text text-anchor="" x="863.99" y="159.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >do_s..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeList::front (2 samples, 0.42%)</title><rect x="591.3" y="277" width="5.0" height="15.0" fill="rgb(229,228,5)" rx="2" ry="2" />
+<text text-anchor="" x="594.34" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::SpanList::lock (3 samples, 0.63%)</title><rect x="467.7" y="229" width="7.4" height="15.0" fill="rgb(235,86,23)" rx="2" ry="2" />
+<text text-anchor="" x="470.65" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_syscall_64 (2 samples, 0.42%)</title><rect x="853.6" y="149" width="4.9" height="15.0" fill="rgb(228,220,38)" rx="2" ry="2" />
+<text text-anchor="" x="856.56" y="159.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__x2apic_send_IPI_mask (1 samples, 0.21%)</title><rect x="1185.1" y="133" width="2.4" height="15.0" fill="rgb(235,200,0)" rx="2" ry="2" />
+<text text-anchor="" x="1188.05" y="143.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__x64_sys_futex (2 samples, 0.42%)</title><rect x="462.7" y="117" width="5.0" height="15.0" fill="rgb(252,3,43)" rx="2" ry="2" />
+<text text-anchor="" x="465.70" y="127.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>entry_SYSCALL_64_after_hwframe (2 samples, 0.42%)</title><rect x="1185.1" y="405" width="4.9" height="15.0" fill="rgb(214,180,48)" rx="2" ry="2" />
+<text text-anchor="" x="1188.05" y="415.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>entry_SYSCALL_64_after_hwframe (2 samples, 0.42%)</title><rect x="853.6" y="165" width="4.9" height="15.0" fill="rgb(210,160,1)" rx="2" ry="2" />
+<text text-anchor="" x="856.56" y="175.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_futex (15 samples, 3.14%)</title><rect x="868.4" y="101" width="37.1" height="15.0" fill="rgb(230,196,10)" rx="2" ry="2" />
+<text text-anchor="" x="871.41" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >do_..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeList::push_front (2 samples, 0.42%)</title><rect x="695.2" y="245" width="5.0" height="15.0" fill="rgb(233,69,54)" rx="2" ry="2" />
+<text text-anchor="" x="698.24" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::next (1 samples, 0.21%)</title><rect x="623.5" y="245" width="2.5" height="15.0" fill="rgb(250,155,1)" rx="2" ry="2" />
+<text text-anchor="" x="626.50" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::setNext (1 samples, 0.21%)</title><rect x="700.2" y="245" width="2.5" height="15.0" fill="rgb(227,191,43)" rx="2" ry="2" />
+<text text-anchor="" x="703.19" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>allocator&lt;TestCase&lt;1024ul&gt; &gt;::max_size (2 samples, 0.42%)</title><rect x="269.7" y="277" width="5.0" height="15.0" fill="rgb(236,211,35)" rx="2" ry="2" />
+<text text-anchor="" x="272.75" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::lock_guard&lt;std::mutex&gt;::lock_guard (10 samples, 2.10%)</title><rect x="388.5" y="213" width="24.7" height="15.0" fill="rgb(227,220,6)" rx="2" ry="2" />
+<text text-anchor="" x="391.49" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >s..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>x64_sys_call (1 samples, 0.21%)</title><rect x="1172.7" y="357" width="2.5" height="15.0" fill="rgb(235,163,12)" rx="2" ry="2" />
+<text text-anchor="" x="1175.68" y="367.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>asm_sysvec_call_function_single (1 samples, 0.21%)</title><rect x="1167.7" y="261" width="2.5" height="15.0" fill="rgb(239,183,8)" rx="2" ry="2" />
+<text text-anchor="" x="1170.74" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__x64_sys_futex (15 samples, 3.14%)</title><rect x="868.4" y="117" width="37.1" height="15.0" fill="rgb(216,4,49)" rx="2" ry="2" />
+<text text-anchor="" x="871.41" y="127.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >__x..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>wake_up_q (15 samples, 3.14%)</title><rect x="868.4" y="69" width="37.1" height="15.0" fill="rgb(228,133,43)" rx="2" ry="2" />
+<text text-anchor="" x="871.41" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >wak..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::setNext (1 samples, 0.21%)</title><rect x="492.4" y="229" width="2.5" height="15.0" fill="rgb(217,130,31)" rx="2" ry="2" />
+<text text-anchor="" x="495.39" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__GI___lll_lock_wake (18 samples, 3.77%)</title><rect x="861.0" y="181" width="44.5" height="15.0" fill="rgb(248,33,28)" rx="2" ry="2" />
+<text text-anchor="" x="863.99" y="191.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >__GI..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeList::pop_front (3 samples, 0.63%)</title><rect x="217.8" y="229" width="7.4" height="15.0" fill="rgb(252,10,17)" rx="2" ry="2" />
+<text text-anchor="" x="220.80" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_syscall_64 (9 samples, 1.89%)</title><rect x="418.2" y="149" width="22.2" height="15.0" fill="rgb(210,38,50)" rx="2" ry="2" />
+<text text-anchor="" x="421.18" y="159.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >d..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::map&lt;unsigned long, WW::Span*, std::less&lt;unsigned long&gt;, std::allocator&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt; &gt;::upper_bound (7 samples, 1.47%)</title><rect x="910.5" y="213" width="17.3" height="15.0" fill="rgb(254,136,48)" rx="2" ry="2" />
+<text text-anchor="" x="913.46" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__gthread_active_p (1 samples, 0.21%)</title><rect x="403.3" y="165" width="2.5" height="15.0" fill="rgb(228,226,41)" rx="2" ry="2" />
+<text text-anchor="" x="406.33" y="175.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::CentralCache::fetchRange (3 samples, 0.63%)</title><rect x="687.8" y="245" width="7.4" height="15.0" fill="rgb(237,60,19)" rx="2" ry="2" />
+<text text-anchor="" x="690.82" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::__array_traits&lt;WW::FreeList, 208ul&gt;::_S_ref (3 samples, 0.63%)</title><rect x="262.3" y="245" width="7.4" height="15.0" fill="rgb(228,217,0)" rx="2" ry="2" />
+<text text-anchor="" x="265.33" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_syscall_64 (3 samples, 0.63%)</title><rect x="1177.6" y="373" width="7.5" height="15.0" fill="rgb(249,174,43)" rx="2" ry="2" />
+<text text-anchor="" x="1180.63" y="383.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>asm_sysvec_apic_timer_interrupt (1 samples, 0.21%)</title><rect x="1182.6" y="261" width="2.5" height="15.0" fill="rgb(251,163,35)" rx="2" ry="2" />
+<text text-anchor="" x="1185.58" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::ThreadCache::~ThreadCache (3 samples, 0.63%)</title><rect x="1165.3" y="373" width="7.4" height="15.0" fill="rgb(246,60,9)" rx="2" ry="2" />
+<text text-anchor="" x="1168.26" y="383.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::ThreadCache::deallocate (101 samples, 21.17%)</title><rect x="764.5" y="277" width="249.9" height="15.0" fill="rgb(237,125,25)" rx="2" ry="2" />
+<text text-anchor="" x="767.51" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >WW::ThreadCache::deallocate</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::Size::sizeToIndex (1 samples, 0.21%)</title><rect x="86.7" y="277" width="2.5" height="15.0" fill="rgb(223,208,14)" rx="2" ry="2" />
+<text text-anchor="" x="89.69" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>exit_mm (2 samples, 0.42%)</title><rect x="1185.1" y="309" width="4.9" height="15.0" fill="rgb(253,190,1)" rx="2" ry="2" />
+<text text-anchor="" x="1188.05" y="319.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>try_to_wake_up (15 samples, 3.14%)</title><rect x="868.4" y="53" width="37.1" height="15.0" fill="rgb(230,166,36)" rx="2" ry="2" />
+<text text-anchor="" x="871.41" y="63.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >try..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>allocator&lt;TestCase&lt;1024ul&gt; &gt;::allocate (1 samples, 0.21%)</title><rect x="10.0" y="309" width="2.5" height="15.0" fill="rgb(226,38,50)" rx="2" ry="2" />
+<text text-anchor="" x="13.00" y="319.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>entry_SYSCALL_64_after_hwframe (3 samples, 0.63%)</title><rect x="930.3" y="165" width="7.4" height="15.0" fill="rgb(235,73,14)" rx="2" ry="2" />
+<text text-anchor="" x="933.25" y="175.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_futex (9 samples, 1.89%)</title><rect x="418.2" y="101" width="22.2" height="15.0" fill="rgb(219,91,6)" rx="2" ry="2" />
+<text text-anchor="" x="421.18" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >d..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>rcu_core_si (1 samples, 0.21%)</title><rect x="1182.6" y="181" width="2.5" height="15.0" fill="rgb(210,201,2)" rx="2" ry="2" />
+<text text-anchor="" x="1185.58" y="191.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_futex (3 samples, 0.63%)</title><rect x="930.3" y="101" width="7.4" height="15.0" fill="rgb(218,97,30)" rx="2" ry="2" />
+<text text-anchor="" x="933.25" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::next (4 samples, 0.84%)</title><rect x="665.6" y="261" width="9.9" height="15.0" fill="rgb(224,80,14)" rx="2" ry="2" />
+<text text-anchor="" x="668.56" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::PageCache::objectToSpan (40 samples, 8.39%)</title><rect x="831.3" y="229" width="99.0" height="15.0" fill="rgb(241,148,21)" rx="2" ry="2" />
+<text text-anchor="" x="834.30" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >WW::PageCac..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[libstdc++.so.6.0.30] (467 samples, 97.90%)</title><rect x="10.0" y="405" width="1155.3" height="15.0" fill="rgb(220,78,22)" rx="2" ry="2" />
+<text text-anchor="" x="13.00" y="415.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >[libstdc++.so.6.0.30]</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>entry_SYSCALL_64_after_hwframe (2 samples, 0.42%)</title><rect x="462.7" y="165" width="5.0" height="15.0" fill="rgb(212,194,26)" rx="2" ry="2" />
+<text text-anchor="" x="465.70" y="175.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::map&lt;unsigned long, WW::Span*, std::less&lt;unsigned long&gt;, std::allocator&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt; &gt;::upper_bound (3 samples, 0.63%)</title><rect x="455.3" y="213" width="7.4" height="15.0" fill="rgb(221,51,3)" rx="2" ry="2" />
+<text text-anchor="" x="458.28" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::vector&lt;TestCase&lt;1024ul&gt;*, std::allocator&lt;TestCase&lt;1024ul&gt;*&gt; &gt;::operator[] (1 samples, 0.21%)</title><rect x="1155.4" y="309" width="2.4" height="15.0" fill="rgb(227,208,29)" rx="2" ry="2" />
+<text text-anchor="" x="1158.37" y="319.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::Size::roundUp (3 samples, 0.63%)</title><rect x="297.0" y="277" width="7.4" height="15.0" fill="rgb(212,119,36)" rx="2" ry="2" />
+<text text-anchor="" x="299.96" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::ThreadCache::shouldReturn (1 samples, 0.21%)</title><rect x="1014.4" y="277" width="2.4" height="15.0" fill="rgb(250,34,33)" rx="2" ry="2" />
+<text text-anchor="" x="1017.36" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>native_send_call_func_ipi (1 samples, 0.21%)</title><rect x="1185.1" y="165" width="2.4" height="15.0" fill="rgb(230,150,5)" rx="2" ry="2" />
+<text text-anchor="" x="1188.05" y="175.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::array&lt;WW::FreeList, 208ul&gt;::operator[] (11 samples, 2.31%)</title><rect x="242.5" y="261" width="27.2" height="15.0" fill="rgb(245,65,25)" rx="2" ry="2" />
+<text text-anchor="" x="245.54" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >s..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeList::front (1 samples, 0.21%)</title><rect x="215.3" y="229" width="2.5" height="15.0" fill="rgb(244,100,40)" rx="2" ry="2" />
+<text text-anchor="" x="218.32" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_exit (2 samples, 0.42%)</title><rect x="1185.1" y="325" width="4.9" height="15.0" fill="rgb(247,87,10)" rx="2" ry="2" />
+<text text-anchor="" x="1188.05" y="335.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>wake_up_q (2 samples, 0.42%)</title><rect x="462.7" y="69" width="5.0" height="15.0" fill="rgb(210,126,10)" rx="2" ry="2" />
+<text text-anchor="" x="465.70" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>rcu_nocb_unlock_irqrestore.part.0 (1 samples, 0.21%)</title><rect x="1182.6" y="149" width="2.5" height="15.0" fill="rgb(249,31,13)" rx="2" ry="2" />
+<text text-anchor="" x="1185.58" y="159.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeList::pop_front (2 samples, 0.42%)</title><rect x="690.3" y="229" width="4.9" height="15.0" fill="rgb(252,149,13)" rx="2" ry="2" />
+<text text-anchor="" x="693.29" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__GI___lll_lock_wake (3 samples, 0.63%)</title><rect x="930.3" y="181" width="7.4" height="15.0" fill="rgb(226,117,53)" rx="2" ry="2" />
+<text text-anchor="" x="933.25" y="191.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::_Select1st&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt;::operator (1 samples, 0.21%)</title><rect x="460.2" y="165" width="2.5" height="15.0" fill="rgb(229,165,22)" rx="2" ry="2" />
+<text text-anchor="" x="463.23" y="175.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::CentralCache::getFreeSpan (1 samples, 0.21%)</title><rect x="687.8" y="229" width="2.5" height="15.0" fill="rgb(215,210,30)" rx="2" ry="2" />
+<text text-anchor="" x="690.82" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>_raw_spin_lock (1 samples, 0.21%)</title><rect x="418.2" y="69" width="2.4" height="15.0" fill="rgb(247,204,17)" rx="2" ry="2" />
+<text text-anchor="" x="421.18" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::array&lt;WW::SpanList, 208ul&gt;::operator[] (1 samples, 0.21%)</title><rect x="230.2" y="229" width="2.4" height="15.0" fill="rgb(237,229,33)" rx="2" ry="2" />
+<text text-anchor="" x="233.17" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_syscall_64 (3 samples, 0.63%)</title><rect x="930.3" y="149" width="7.4" height="15.0" fill="rgb(235,208,30)" rx="2" ry="2" />
+<text text-anchor="" x="933.25" y="159.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::Size::sizeToIndex (1 samples, 0.21%)</title><rect x="680.4" y="261" width="2.5" height="15.0" fill="rgb(215,222,50)" rx="2" ry="2" />
+<text text-anchor="" x="683.40" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::setNext (8 samples, 1.68%)</title><rect x="779.4" y="245" width="19.7" height="15.0" fill="rgb(254,40,51)" rx="2" ry="2" />
+<text text-anchor="" x="782.35" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>void std::allocator_traits&lt;std::allocator&lt;TestCase&lt;512ul&gt;*&gt; &gt;::construct&lt;TestCase&lt;512ul&gt;*, TestCase&lt;512ul&gt;*&amp;&gt; (2 samples, 0.42%)</title><rect x="1039.1" y="293" width="4.9" height="15.0" fill="rgb(232,125,33)" rx="2" ry="2" />
+<text text-anchor="" x="1042.10" y="303.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__x64_sys_futex (3 samples, 0.63%)</title><rect x="930.3" y="117" width="7.4" height="15.0" fill="rgb(247,89,3)" rx="2" ry="2" />
+<text text-anchor="" x="933.25" y="127.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::ThreadCache::returnToCentralCache (53 samples, 11.11%)</title><rect x="828.8" y="261" width="131.1" height="15.0" fill="rgb(251,64,15)" rx="2" ry="2" />
+<text text-anchor="" x="831.83" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >WW::ThreadCache:..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>pthread_mutex_unlock@@GLIBC_2.2.5 (2 samples, 0.42%)</title><rect x="905.5" y="181" width="5.0" height="15.0" fill="rgb(226,203,54)" rx="2" ry="2" />
+<text text-anchor="" x="908.51" y="191.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>x64_sys_call (9 samples, 1.89%)</title><rect x="418.2" y="133" width="22.2" height="15.0" fill="rgb(229,98,3)" rx="2" ry="2" />
+<text text-anchor="" x="421.18" y="143.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >x..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::lock_guard&lt;std::mutex&gt;::~lock_guard (20 samples, 4.19%)</title><rect x="861.0" y="213" width="49.5" height="15.0" fill="rgb(212,46,15)" rx="2" ry="2" />
+<text text-anchor="" x="863.99" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >std:..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeList::size (2 samples, 0.42%)</title><rect x="522.1" y="245" width="4.9" height="15.0" fill="rgb(253,208,24)" rx="2" ry="2" />
+<text text-anchor="" x="525.08" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::next (17 samples, 3.56%)</title><rect x="141.1" y="245" width="42.1" height="15.0" fill="rgb(254,185,5)" rx="2" ry="2" />
+<text text-anchor="" x="144.11" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >WW:..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::lock_guard&lt;std::mutex&gt;::~lock_guard (2 samples, 0.42%)</title><rect x="462.7" y="213" width="5.0" height="15.0" fill="rgb(227,192,35)" rx="2" ry="2" />
+<text text-anchor="" x="465.70" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeList::empty (3 samples, 0.63%)</title><rect x="618.6" y="261" width="7.4" height="15.0" fill="rgb(253,28,28)" rx="2" ry="2" />
+<text text-anchor="" x="621.55" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>void __gnu_cxx::new_allocator&lt;TestCase&lt;1024ul&gt;*&gt;::construct&lt;TestCase&lt;1024ul&gt;*, TestCase&lt;1024ul&gt;*&amp;&gt; (12 samples, 2.52%)</title><rect x="1086.1" y="261" width="29.7" height="15.0" fill="rgb(209,71,30)" rx="2" ry="2" />
+<text text-anchor="" x="1089.10" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >vo..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::CentralCache::getFreeSpan (1 samples, 0.21%)</title><rect x="212.9" y="229" width="2.4" height="15.0" fill="rgb(220,127,52)" rx="2" ry="2" />
+<text text-anchor="" x="215.85" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::ThreadCache::returnToCentralCache (3 samples, 0.63%)</title><rect x="1165.3" y="357" width="7.4" height="15.0" fill="rgb(205,41,26)" rx="2" ry="2" />
+<text text-anchor="" x="1168.26" y="367.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::__array_traits&lt;WW::FreeList, 208ul&gt;::_S_ref (1 samples, 0.21%)</title><rect x="240.1" y="261" width="2.4" height="15.0" fill="rgb(242,60,52)" rx="2" ry="2" />
+<text text-anchor="" x="243.06" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__gthread_mutex_lock (1 samples, 0.21%)</title><rect x="403.3" y="181" width="2.5" height="15.0" fill="rgb(209,78,32)" rx="2" ry="2" />
+<text text-anchor="" x="406.33" y="191.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>void std::__invoke_impl&lt;void, main::{lambda (467 samples, 97.90%)</title><rect x="10.0" y="325" width="1155.3" height="15.0" fill="rgb(222,7,33)" rx="2" ry="2" />
+<text text-anchor="" x="13.00" y="335.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >void std::__invoke_impl&lt;void, main::{lambda</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::__array_traits&lt;WW::SpanList, 208ul&gt;::_S_ref (1 samples, 0.21%)</title><rect x="230.2" y="213" width="2.4" height="15.0" fill="rgb(218,1,26)" rx="2" ry="2" />
+<text text-anchor="" x="233.17" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::array&lt;WW::FreeList, 208ul&gt;::operator[] (1 samples, 0.21%)</title><rect x="569.1" y="277" width="2.5" height="15.0" fill="rgb(219,48,16)" rx="2" ry="2" />
+<text text-anchor="" x="572.08" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::CentralCache::returnRange (48 samples, 10.06%)</title><rect x="828.8" y="245" width="118.8" height="15.0" fill="rgb(215,48,15)" rx="2" ry="2" />
+<text text-anchor="" x="831.83" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >WW::CentralCac..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeList::empty (3 samples, 0.63%)</title><rect x="106.5" y="261" width="7.4" height="15.0" fill="rgb(222,80,1)" rx="2" ry="2" />
+<text text-anchor="" x="109.48" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeList::push_front (11 samples, 2.31%)</title><rect x="326.6" y="261" width="27.3" height="15.0" fill="rgb(219,75,32)" rx="2" ry="2" />
+<text text-anchor="" x="329.65" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >W..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>pthread_mutex_unlock@@GLIBC_2.2.5 (5 samples, 1.05%)</title><rect x="475.1" y="197" width="12.3" height="15.0" fill="rgb(232,127,34)" rx="2" ry="2" />
+<text text-anchor="" x="478.07" y="207.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::_Rb_tree&lt;unsigned long, std::pair&lt;unsigned long const, WW::Span*&gt;, std::_Select1st&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt;, std::less&lt;unsigned long&gt;, std::allocator&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt; &gt;::begin (1 samples, 0.21%)</title><rect x="452.8" y="197" width="2.5" height="15.0" fill="rgb(235,182,49)" rx="2" ry="2" />
+<text text-anchor="" x="455.81" y="207.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>entry_SYSCALL_64_after_hwframe (3 samples, 0.63%)</title><rect x="1177.6" y="389" width="7.5" height="15.0" fill="rgb(222,121,46)" rx="2" ry="2" />
+<text text-anchor="" x="1180.63" y="399.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::thread::_State_impl&lt;std::thread::_Invoker&lt;std::tuple&lt;main::{lambda (467 samples, 97.90%)</title><rect x="10.0" y="389" width="1155.3" height="15.0" fill="rgb(211,100,21)" rx="2" ry="2" />
+<text text-anchor="" x="13.00" y="399.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >std::thread::_State_impl&lt;std::thread::_Invoker&lt;std::tuple&lt;main::{lambda</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>entry_SYSCALL_64_after_hwframe (18 samples, 3.77%)</title><rect x="861.0" y="165" width="44.5" height="15.0" fill="rgb(253,105,24)" rx="2" ry="2" />
+<text text-anchor="" x="863.99" y="175.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >entr..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::mutex::lock (7 samples, 1.47%)</title><rect x="843.7" y="197" width="17.3" height="15.0" fill="rgb(233,167,43)" rx="2" ry="2" />
+<text text-anchor="" x="846.67" y="207.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::__invoke_result&lt;main::{lambda (467 samples, 97.90%)</title><rect x="10.0" y="341" width="1155.3" height="15.0" fill="rgb(237,113,5)" rx="2" ry="2" />
+<text text-anchor="" x="13.00" y="351.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >std::__invoke_result&lt;main::{lambda</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>zap_pte_range (1 samples, 0.21%)</title><rect x="1187.5" y="181" width="2.5" height="15.0" fill="rgb(215,144,54)" rx="2" ry="2" />
+<text text-anchor="" x="1190.53" y="191.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::setNext (2 samples, 0.42%)</title><rect x="353.9" y="261" width="4.9" height="15.0" fill="rgb(254,61,19)" rx="2" ry="2" />
+<text text-anchor="" x="356.86" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>void std::vector&lt;TestCase&lt;1024ul&gt;*, std::allocator&lt;TestCase&lt;1024ul&gt;*&gt; &gt;::emplace_back&lt;TestCase&lt;1024ul&gt;*&amp;&gt; (29 samples, 6.08%)</title><rect x="1044.0" y="293" width="71.8" height="15.0" fill="rgb(213,41,3)" rx="2" ry="2" />
+<text text-anchor="" x="1047.05" y="303.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >void std..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>pthread_mutex_unlock@@GLIBC_2.2.5 (4 samples, 0.84%)</title><rect x="440.4" y="181" width="9.9" height="15.0" fill="rgb(206,219,27)" rx="2" ry="2" />
+<text text-anchor="" x="443.44" y="191.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title> (1 samples, 0.21%)</title><rect x="841.2" y="197" width="2.5" height="15.0" fill="rgb(245,106,48)" rx="2" ry="2" />
+<text text-anchor="" x="844.19" y="207.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>void std::allocator_traits&lt;std::allocator&lt;TestCase&lt;1024ul&gt;*&gt; &gt;::construct&lt;TestCase&lt;1024ul&gt;*, TestCase&lt;1024ul&gt;*&amp;&gt; (16 samples, 3.35%)</title><rect x="1076.2" y="277" width="39.6" height="15.0" fill="rgb(229,50,47)" rx="2" ry="2" />
+<text text-anchor="" x="1079.21" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >voi..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>void __gnu_cxx::new_allocator&lt;TestCase&lt;512ul&gt;*&gt;::construct&lt;TestCase&lt;512ul&gt;*, TestCase&lt;512ul&gt;*&amp;&gt; (3 samples, 0.63%)</title><rect x="1147.9" y="261" width="7.5" height="15.0" fill="rgb(247,202,24)" rx="2" ry="2" />
+<text text-anchor="" x="1150.95" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__mmput (2 samples, 0.42%)</title><rect x="1185.1" y="277" width="4.9" height="15.0" fill="rgb(216,22,27)" rx="2" ry="2" />
+<text text-anchor="" x="1188.05" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::lock_guard&lt;std::mutex&gt;::~lock_guard (15 samples, 3.14%)</title><rect x="413.2" y="213" width="37.1" height="15.0" fill="rgb(226,143,38)" rx="2" ry="2" />
+<text text-anchor="" x="416.23" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >std..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>wake_up_q (3 samples, 0.63%)</title><rect x="930.3" y="69" width="7.4" height="15.0" fill="rgb(238,41,51)" rx="2" ry="2" />
+<text text-anchor="" x="933.25" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::next (1 samples, 0.21%)</title><rect x="628.4" y="245" width="2.5" height="15.0" fill="rgb(216,191,29)" rx="2" ry="2" />
+<text text-anchor="" x="631.45" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::mutex::unlock (20 samples, 4.19%)</title><rect x="861.0" y="197" width="49.5" height="15.0" fill="rgb(214,12,14)" rx="2" ry="2" />
+<text text-anchor="" x="863.99" y="207.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >std:..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::ThreadCache::deallocate (1 samples, 0.21%)</title><rect x="61.9" y="293" width="2.5" height="15.0" fill="rgb(206,73,18)" rx="2" ry="2" />
+<text text-anchor="" x="64.95" y="303.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::ThreadCache::shouldReturn (2 samples, 0.42%)</title><rect x="564.1" y="277" width="5.0" height="15.0" fill="rgb(216,56,9)" rx="2" ry="2" />
+<text text-anchor="" x="567.13" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>pthread_mutex_lock@@GLIBC_2.2.5 (1 samples, 0.21%)</title><rect x="858.5" y="181" width="2.5" height="15.0" fill="rgb(254,226,32)" rx="2" ry="2" />
+<text text-anchor="" x="861.51" y="191.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeList::push_front (1 samples, 0.21%)</title><rect x="759.6" y="277" width="2.4" height="15.0" fill="rgb(210,20,10)" rx="2" ry="2" />
+<text text-anchor="" x="762.56" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::mutex::unlock (2 samples, 0.42%)</title><rect x="1167.7" y="293" width="5.0" height="15.0" fill="rgb(238,201,41)" rx="2" ry="2" />
+<text text-anchor="" x="1170.74" y="303.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>_raw_spin_unlock_irqrestore (15 samples, 3.14%)</title><rect x="868.4" y="37" width="37.1" height="15.0" fill="rgb(211,21,30)" rx="2" ry="2" />
+<text text-anchor="" x="871.41" y="47.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >_ra..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>unmap_single_vma (1 samples, 0.21%)</title><rect x="1187.5" y="229" width="2.5" height="15.0" fill="rgb(217,190,8)" rx="2" ry="2" />
+<text text-anchor="" x="1190.53" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>allocator&lt;TestCase&lt;512ul&gt; &gt;::max_size (1 samples, 0.21%)</title><rect x="739.8" y="277" width="2.4" height="15.0" fill="rgb(252,2,38)" rx="2" ry="2" />
+<text text-anchor="" x="742.77" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>entry_SYSCALL_64_after_hwframe (1 samples, 0.21%)</title><rect x="1172.7" y="389" width="2.5" height="15.0" fill="rgb(227,8,30)" rx="2" ry="2" />
+<text text-anchor="" x="1175.68" y="399.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::lock_guard&lt;std::mutex&gt;::~lock_guard (2 samples, 0.42%)</title><rect x="1167.7" y="309" width="5.0" height="15.0" fill="rgb(238,78,21)" rx="2" ry="2" />
+<text text-anchor="" x="1170.74" y="319.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::next (1 samples, 0.21%)</title><rect x="378.6" y="229" width="2.5" height="15.0" fill="rgb(242,165,17)" rx="2" ry="2" />
+<text text-anchor="" x="381.60" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>mmput (2 samples, 0.42%)</title><rect x="1185.1" y="293" width="4.9" height="15.0" fill="rgb(217,62,48)" rx="2" ry="2" />
+<text text-anchor="" x="1188.05" y="303.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::mutex::lock (1 samples, 0.21%)</title><rect x="487.4" y="229" width="2.5" height="15.0" fill="rgb(212,222,13)" rx="2" ry="2" />
+<text text-anchor="" x="490.44" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sysvec_apic_timer_interrupt (1 samples, 0.21%)</title><rect x="1182.6" y="245" width="2.5" height="15.0" fill="rgb(227,53,21)" rx="2" ry="2" />
+<text text-anchor="" x="1185.58" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>void __gnu_cxx::new_allocator&lt;TestCase&lt;512ul&gt;*&gt;::construct&lt;TestCase&lt;512ul&gt;*, TestCase&lt;512ul&gt;*&amp;&gt; (2 samples, 0.42%)</title><rect x="1130.6" y="277" width="5.0" height="15.0" fill="rgb(232,54,13)" rx="2" ry="2" />
+<text text-anchor="" x="1133.63" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (3 samples, 0.63%)</title><rect x="1165.3" y="405" width="7.4" height="15.0" fill="rgb(225,195,50)" rx="2" ry="2" />
+<text text-anchor="" x="1168.26" y="415.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::array&lt;WW::FreeList, 208ul&gt;::operator[] (1 samples, 0.21%)</title><rect x="957.5" y="245" width="2.4" height="15.0" fill="rgb(210,41,48)" rx="2" ry="2" />
+<text text-anchor="" x="960.46" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::SpanList::unlock (5 samples, 1.05%)</title><rect x="475.1" y="229" width="12.3" height="15.0" fill="rgb(234,162,9)" rx="2" ry="2" />
+<text text-anchor="" x="478.07" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::array&lt;WW::FreeList, 208ul&gt;::operator[] (9 samples, 1.89%)</title><rect x="979.7" y="245" width="22.3" height="15.0" fill="rgb(208,158,35)" rx="2" ry="2" />
+<text text-anchor="" x="982.73" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >s..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeList::front (2 samples, 0.42%)</title><rect x="113.9" y="261" width="4.9" height="15.0" fill="rgb(223,58,8)" rx="2" ry="2" />
+<text text-anchor="" x="116.90" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>void __gnu_cxx::new_allocator&lt;TestCase&lt;1024ul&gt;*&gt;::construct&lt;TestCase&lt;1024ul&gt;*, TestCase&lt;1024ul&gt;*&amp;&gt; (1 samples, 0.21%)</title><rect x="1073.7" y="277" width="2.5" height="15.0" fill="rgb(232,47,14)" rx="2" ry="2" />
+<text text-anchor="" x="1076.73" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>_raw_spin_unlock_irqrestore (8 samples, 1.68%)</title><rect x="420.6" y="37" width="19.8" height="15.0" fill="rgb(212,220,42)" rx="2" ry="2" />
+<text text-anchor="" x="423.65" y="47.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__futex_wait (1 samples, 0.21%)</title><rect x="856.0" y="69" width="2.5" height="15.0" fill="rgb(221,165,42)" rx="2" ry="2" />
+<text text-anchor="" x="859.04" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__GI___lll_lock_wake (2 samples, 0.42%)</title><rect x="462.7" y="181" width="5.0" height="15.0" fill="rgb(240,183,8)" rx="2" ry="2" />
+<text text-anchor="" x="465.70" y="191.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>TestCase&lt;1024ul&gt;*&amp; std::forward&lt;TestCase&lt;1024ul&gt;*&amp;&gt; (2 samples, 0.42%)</title><rect x="1068.8" y="277" width="4.9" height="15.0" fill="rgb(212,220,4)" rx="2" ry="2" />
+<text text-anchor="" x="1071.78" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::array&lt;WW::FreeList, 208ul&gt;::operator[] (4 samples, 0.84%)</title><rect x="1004.5" y="261" width="9.9" height="15.0" fill="rgb(253,199,48)" rx="2" ry="2" />
+<text text-anchor="" x="1007.47" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>TestCase&lt;1024ul&gt;*&amp; std::forward&lt;TestCase&lt;1024ul&gt;*&amp;&gt; (1 samples, 0.21%)</title><rect x="1083.6" y="261" width="2.5" height="15.0" fill="rgb(248,6,54)" rx="2" ry="2" />
+<text text-anchor="" x="1086.63" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::numeric_limits&lt;unsigned long&gt;::max (3 samples, 0.63%)</title><rect x="747.2" y="277" width="7.4" height="15.0" fill="rgb(254,61,31)" rx="2" ry="2" />
+<text text-anchor="" x="750.19" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::_Rb_tree_node&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt;::_M_valptr (1 samples, 0.21%)</title><rect x="915.4" y="149" width="2.5" height="15.0" fill="rgb(254,17,10)" rx="2" ry="2" />
+<text text-anchor="" x="918.41" y="159.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__gthread_mutex_unlock (1 samples, 0.21%)</title><rect x="1167.7" y="277" width="2.5" height="15.0" fill="rgb(242,220,53)" rx="2" ry="2" />
+<text text-anchor="" x="1170.74" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>vm_mmap_pgoff (1 samples, 0.21%)</title><rect x="1172.7" y="309" width="2.5" height="15.0" fill="rgb(216,63,49)" rx="2" ry="2" />
+<text text-anchor="" x="1175.68" y="319.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>main::{lambda (460 samples, 96.44%)</title><rect x="17.4" y="309" width="1138.0" height="15.0" fill="rgb(209,26,46)" rx="2" ry="2" />
+<text text-anchor="" x="20.42" y="319.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >main::{lambda</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeList::push_front (11 samples, 2.31%)</title><rect x="771.9" y="261" width="27.2" height="15.0" fill="rgb(251,135,41)" rx="2" ry="2" />
+<text text-anchor="" x="774.93" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >W..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeList::push_front (1 samples, 0.21%)</title><rect x="232.6" y="245" width="2.5" height="15.0" fill="rgb(212,122,44)" rx="2" ry="2" />
+<text text-anchor="" x="235.64" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::Size::roundUp (1 samples, 0.21%)</title><rect x="762.0" y="277" width="2.5" height="15.0" fill="rgb(236,99,48)" rx="2" ry="2" />
+<text text-anchor="" x="765.03" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::_Rb_tree_node&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt;::_M_valptr (1 samples, 0.21%)</title><rect x="841.2" y="181" width="2.5" height="15.0" fill="rgb(254,6,12)" rx="2" ry="2" />
+<text text-anchor="" x="844.19" y="191.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::_Rb_tree_iterator&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt;::_Rb_tree_iterator (1 samples, 0.21%)</title><rect x="920.4" y="165" width="2.4" height="15.0" fill="rgb(225,83,22)" rx="2" ry="2" />
+<text text-anchor="" x="923.36" y="175.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>void std::allocator_traits&lt;std::allocator&lt;TestCase&lt;512ul&gt;*&gt; &gt;::construct&lt;TestCase&lt;512ul&gt;*, TestCase&lt;512ul&gt;*&amp;&gt; (8 samples, 1.68%)</title><rect x="1135.6" y="277" width="19.8" height="15.0" fill="rgb(242,146,38)" rx="2" ry="2" />
+<text text-anchor="" x="1138.58" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::array&lt;WW::FreeList, 208ul&gt;::operator[] (5 samples, 1.05%)</title><rect x="551.8" y="261" width="12.3" height="15.0" fill="rgb(217,199,20)" rx="2" ry="2" />
+<text text-anchor="" x="554.76" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::ThreadCache::deallocate (105 samples, 22.01%)</title><rect x="304.4" y="277" width="259.7" height="15.0" fill="rgb(208,20,14)" rx="2" ry="2" />
+<text text-anchor="" x="307.38" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >WW::ThreadCache::deallocate</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>x2apic_send_IPI_mask (1 samples, 0.21%)</title><rect x="1185.1" y="149" width="2.4" height="15.0" fill="rgb(207,27,24)" rx="2" ry="2" />
+<text text-anchor="" x="1188.05" y="159.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeList::pop_front (14 samples, 2.94%)</title><rect x="630.9" y="261" width="34.7" height="15.0" fill="rgb(215,216,38)" rx="2" ry="2" />
+<text text-anchor="" x="633.92" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >WW..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeList::max_size (2 samples, 0.42%)</title><rect x="321.7" y="261" width="4.9" height="15.0" fill="rgb(251,100,36)" rx="2" ry="2" />
+<text text-anchor="" x="324.70" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::lock_guard&lt;std::mutex&gt;::lock_guard (7 samples, 1.47%)</title><rect x="843.7" y="213" width="17.3" height="15.0" fill="rgb(217,30,7)" rx="2" ry="2" />
+<text text-anchor="" x="846.67" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__GI___lll_lock_wait (6 samples, 1.26%)</title><rect x="388.5" y="181" width="14.8" height="15.0" fill="rgb(230,217,13)" rx="2" ry="2" />
+<text text-anchor="" x="391.49" y="191.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeList::front (2 samples, 0.42%)</title><rect x="626.0" y="261" width="4.9" height="15.0" fill="rgb(205,153,0)" rx="2" ry="2" />
+<text text-anchor="" x="628.97" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::__array_traits&lt;WW::FreeList, 208ul&gt;::_S_ref (1 samples, 0.21%)</title><rect x="1002.0" y="261" width="2.5" height="15.0" fill="rgb(254,49,20)" rx="2" ry="2" />
+<text text-anchor="" x="1004.99" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::next (1 samples, 0.21%)</title><rect x="235.1" y="245" width="2.5" height="15.0" fill="rgb(210,91,39)" rx="2" ry="2" />
+<text text-anchor="" x="238.12" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::ThreadCache::shouldReturn (20 samples, 4.19%)</title><rect x="502.3" y="261" width="49.5" height="15.0" fill="rgb(227,2,30)" rx="2" ry="2" />
+<text text-anchor="" x="505.29" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >WW::..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::__array_traits&lt;WW::FreeList, 208ul&gt;::_S_ref (5 samples, 1.05%)</title><rect x="989.6" y="229" width="12.4" height="15.0" fill="rgb(238,77,19)" rx="2" ry="2" />
+<text text-anchor="" x="992.62" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::SpanList::lock (3 samples, 0.63%)</title><rect x="940.1" y="229" width="7.5" height="15.0" fill="rgb(249,137,39)" rx="2" ry="2" />
+<text text-anchor="" x="943.15" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>TestCase&lt;1024ul&gt;*&amp; std::forward&lt;TestCase&lt;1024ul&gt;*&amp;&gt; (2 samples, 0.42%)</title><rect x="1110.8" y="245" width="5.0" height="15.0" fill="rgb(208,143,32)" rx="2" ry="2" />
+<text text-anchor="" x="1113.84" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::next (1 samples, 0.21%)</title><rect x="799.1" y="261" width="2.5" height="15.0" fill="rgb(232,117,35)" rx="2" ry="2" />
+<text text-anchor="" x="802.14" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>pthread_mutex_lock@@GLIBC_2.2.5 (3 samples, 0.63%)</title><rect x="405.8" y="181" width="7.4" height="15.0" fill="rgb(241,114,10)" rx="2" ry="2" />
+<text text-anchor="" x="408.81" y="191.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>void std::vector&lt;TestCase&lt;512ul&gt;*, std::allocator&lt;TestCase&lt;512ul&gt;*&gt; &gt;::emplace_back&lt;TestCase&lt;512ul&gt;*&amp;&gt; (16 samples, 3.35%)</title><rect x="1115.8" y="293" width="39.6" height="15.0" fill="rgb(234,67,10)" rx="2" ry="2" />
+<text text-anchor="" x="1118.79" y="303.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >voi..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::CentralCache::fetchRange (8 samples, 1.68%)</title><rect x="212.9" y="245" width="19.7" height="15.0" fill="rgb(248,25,47)" rx="2" ry="2" />
+<text text-anchor="" x="215.85" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>void std::thread::_Invoker&lt;std::tuple&lt;main::{lambda (467 samples, 97.90%)</title><rect x="10.0" y="357" width="1155.3" height="15.0" fill="rgb(211,165,6)" rx="2" ry="2" />
+<text text-anchor="" x="13.00" y="367.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >void std::thread::_Invoker&lt;std::tuple&lt;main::{lambda</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::SpanList::end (1 samples, 0.21%)</title><rect x="212.9" y="213" width="2.4" height="15.0" fill="rgb(242,179,31)" rx="2" ry="2" />
+<text text-anchor="" x="215.85" y="223.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>allocator&lt;TestCase&lt;1024ul&gt; &gt;::allocate (88 samples, 18.45%)</title><rect x="64.4" y="293" width="217.7" height="15.0" fill="rgb(239,224,29)" rx="2" ry="2" />
+<text text-anchor="" x="67.42" y="303.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >allocator&lt;TestCase&lt;1024ul&gt; &gt;..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>zap_pmd_range.isra.0 (1 samples, 0.21%)</title><rect x="1187.5" y="197" width="2.5" height="15.0" fill="rgb(225,115,37)" rx="2" ry="2" />
+<text text-anchor="" x="1190.53" y="207.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__GI___lll_lock_wait (4 samples, 0.84%)</title><rect x="848.6" y="181" width="9.9" height="15.0" fill="rgb(205,91,24)" rx="2" ry="2" />
+<text text-anchor="" x="851.62" y="191.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::ThreadCache::allocate (73 samples, 15.30%)</title><rect x="89.2" y="277" width="180.5" height="15.0" fill="rgb(209,132,39)" rx="2" ry="2" />
+<text text-anchor="" x="92.16" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >WW::ThreadCache::allocate</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>wake_up_q (8 samples, 1.68%)</title><rect x="420.6" y="69" width="19.8" height="15.0" fill="rgb(251,142,47)" rx="2" ry="2" />
+<text text-anchor="" x="423.65" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>TestCase&lt;512ul&gt;*&amp; std::forward&lt;TestCase&lt;512ul&gt;*&amp;&gt; (1 samples, 0.21%)</title><rect x="1152.9" y="245" width="2.5" height="15.0" fill="rgb(248,40,38)" rx="2" ry="2" />
+<text text-anchor="" x="1155.89" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeList::pop_front (2 samples, 0.42%)</title><rect x="489.9" y="245" width="5.0" height="15.0" fill="rgb(244,74,34)" rx="2" ry="2" />
+<text text-anchor="" x="492.92" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>futex_wait (1 samples, 0.21%)</title><rect x="856.0" y="85" width="2.5" height="15.0" fill="rgb(213,7,37)" rx="2" ry="2" />
+<text text-anchor="" x="859.04" y="95.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::thread::_Invoker&lt;std::tuple&lt;main::{lambda (467 samples, 97.90%)</title><rect x="10.0" y="373" width="1155.3" height="15.0" fill="rgb(211,81,39)" rx="2" ry="2" />
+<text text-anchor="" x="13.00" y="383.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >std::thread::_Invoker&lt;std::tuple&lt;main::{lambda</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::array&lt;WW::FreeList, 208ul&gt;::operator[] (10 samples, 2.10%)</title><rect x="527.0" y="245" width="24.8" height="15.0" fill="rgb(215,15,7)" rx="2" ry="2" />
+<text text-anchor="" x="530.02" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >s..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::next (11 samples, 2.31%)</title><rect x="638.3" y="245" width="27.3" height="15.0" fill="rgb(222,156,49)" rx="2" ry="2" />
+<text text-anchor="" x="641.34" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >W..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::Span::count (1 samples, 0.21%)</title><rect x="937.7" y="229" width="2.4" height="15.0" fill="rgb(213,11,30)" rx="2" ry="2" />
+<text text-anchor="" x="940.67" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::CentralCache::returnRange (3 samples, 0.63%)</title><rect x="1165.3" y="341" width="7.4" height="15.0" fill="rgb(233,221,32)" rx="2" ry="2" />
+<text text-anchor="" x="1168.26" y="351.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::mutex::unlock (3 samples, 0.63%)</title><rect x="930.3" y="197" width="7.4" height="15.0" fill="rgb(224,9,39)" rx="2" ry="2" />
+<text text-anchor="" x="933.25" y="207.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_syscall_64 (2 samples, 0.42%)</title><rect x="462.7" y="149" width="5.0" height="15.0" fill="rgb(238,205,36)" rx="2" ry="2" />
+<text text-anchor="" x="465.70" y="159.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::_Rb_tree&lt;unsigned long, std::pair&lt;unsigned long const, WW::Span*&gt;, std::_Select1st&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt;, std::less&lt;unsigned long&gt;, std::allocator&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt; &gt;::_M_upper_bound (1 samples, 0.21%)</title><rect x="910.5" y="197" width="2.4" height="15.0" fill="rgb(221,73,48)" rx="2" ry="2" />
+<text text-anchor="" x="913.46" y="207.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::array&lt;WW::FreeList, 208ul&gt;::operator[] (2 samples, 0.42%)</title><rect x="742.2" y="277" width="5.0" height="15.0" fill="rgb(231,96,37)" rx="2" ry="2" />
+<text text-anchor="" x="745.24" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::PageCache::returnSpan (3 samples, 0.63%)</title><rect x="930.3" y="229" width="7.4" height="15.0" fill="rgb(225,26,48)" rx="2" ry="2" />
+<text text-anchor="" x="933.25" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>wake_up_q (1 samples, 0.21%)</title><rect x="1172.7" y="261" width="2.5" height="15.0" fill="rgb(225,49,33)" rx="2" ry="2" />
+<text text-anchor="" x="1175.68" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>exit_mmap (2 samples, 0.42%)</title><rect x="1185.1" y="261" width="4.9" height="15.0" fill="rgb(235,46,22)" rx="2" ry="2" />
+<text text-anchor="" x="1188.05" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>native_queued_spin_lock_slowpath (1 samples, 0.21%)</title><rect x="418.2" y="53" width="2.4" height="15.0" fill="rgb(240,204,14)" rx="2" ry="2" />
+<text text-anchor="" x="421.18" y="63.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::ThreadCache::allocate (2 samples, 0.42%)</title><rect x="57.0" y="293" width="4.9" height="15.0" fill="rgb(253,172,3)" rx="2" ry="2" />
+<text text-anchor="" x="60.00" y="303.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>pthread_mutex_lock@@GLIBC_2.2.5 (3 samples, 0.63%)</title><rect x="467.7" y="197" width="7.4" height="15.0" fill="rgb(237,174,29)" rx="2" ry="2" />
+<text text-anchor="" x="470.65" y="207.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeList::push_front (1 samples, 0.21%)</title><rect x="376.1" y="229" width="2.5" height="15.0" fill="rgb(239,136,20)" rx="2" ry="2" />
+<text text-anchor="" x="379.12" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::mutex::unlock (15 samples, 3.14%)</title><rect x="413.2" y="197" width="37.1" height="15.0" fill="rgb(246,135,17)" rx="2" ry="2" />
+<text text-anchor="" x="416.23" y="207.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >std..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>cfree@GLIBC_2.2.5 (1 samples, 0.21%)</title><rect x="1175.2" y="405" width="2.4" height="15.0" fill="rgb(207,10,44)" rx="2" ry="2" />
+<text text-anchor="" x="1178.16" y="415.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::ThreadCache::fetchFromCentralCache (11 samples, 2.31%)</title><rect x="212.9" y="261" width="27.2" height="15.0" fill="rgb(228,5,37)" rx="2" ry="2" />
+<text text-anchor="" x="215.85" y="271.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >W..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_syscall_64 (1 samples, 0.21%)</title><rect x="1172.7" y="373" width="2.5" height="15.0" fill="rgb(215,94,34)" rx="2" ry="2" />
+<text text-anchor="" x="1175.68" y="383.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__x64_sys_futex (9 samples, 1.89%)</title><rect x="418.2" y="117" width="22.2" height="15.0" fill="rgb(241,29,33)" rx="2" ry="2" />
+<text text-anchor="" x="421.18" y="127.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >_..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>flush_tlb_mm_range (1 samples, 0.21%)</title><rect x="1185.1" y="229" width="2.4" height="15.0" fill="rgb(212,134,49)" rx="2" ry="2" />
+<text text-anchor="" x="1188.05" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::array&lt;WW::FreeList, 208ul&gt;::operator[] (2 samples, 0.42%)</title><rect x="274.7" y="277" width="4.9" height="15.0" fill="rgb(208,47,19)" rx="2" ry="2" />
+<text text-anchor="" x="277.70" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>pthread_mutex_unlock@@GLIBC_2.2.5 (1 samples, 0.21%)</title><rect x="1170.2" y="277" width="2.5" height="15.0" fill="rgb(205,132,43)" rx="2" ry="2" />
+<text text-anchor="" x="1173.21" y="287.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>handle_softirqs (1 samples, 0.21%)</title><rect x="1182.6" y="197" width="2.5" height="15.0" fill="rgb(254,194,10)" rx="2" ry="2" />
+<text text-anchor="" x="1185.58" y="207.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::__array_traits&lt;WW::FreeList, 208ul&gt;::_S_ref (6 samples, 1.26%)</title><rect x="536.9" y="229" width="14.9" height="15.0" fill="rgb(238,215,2)" rx="2" ry="2" />
+<text text-anchor="" x="539.92" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>allocator&lt;TestCase&lt;512ul&gt; &gt;::max_size (2 samples, 0.42%)</title><rect x="1016.8" y="293" width="5.0" height="15.0" fill="rgb(225,122,42)" rx="2" ry="2" />
+<text text-anchor="" x="1019.83" y="303.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_syscall_64 (4 samples, 0.84%)</title><rect x="393.4" y="149" width="9.9" height="15.0" fill="rgb(222,52,9)" rx="2" ry="2" />
+<text text-anchor="" x="396.44" y="159.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::_Rb_tree&lt;unsigned long, std::pair&lt;unsigned long const, WW::Span*&gt;, std::_Select1st&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt;, std::less&lt;unsigned long&gt;, std::allocator&lt;std::pair&lt;unsigned long const, WW::Span*&gt; &gt; &gt;::_S_left (1 samples, 0.21%)</title><rect x="917.9" y="165" width="2.5" height="15.0" fill="rgb(230,213,18)" rx="2" ry="2" />
+<text text-anchor="" x="920.88" y="175.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>wake_up_new_task (3 samples, 0.63%)</title><rect x="1177.6" y="293" width="7.5" height="15.0" fill="rgb(230,179,40)" rx="2" ry="2" />
+<text text-anchor="" x="1180.63" y="303.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__mmap (1 samples, 0.21%)</title><rect x="1172.7" y="405" width="2.5" height="15.0" fill="rgb(213,63,31)" rx="2" ry="2" />
+<text text-anchor="" x="1175.68" y="415.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>analyze_benchma (477 samples, 100.00%)</title><rect x="10.0" y="421" width="1180.0" height="15.0" fill="rgb(235,11,43)" rx="2" ry="2" />
+<text text-anchor="" x="13.00" y="431.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >analyze_benchma</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>futex_wait_setup (1 samples, 0.21%)</title><rect x="856.0" y="53" width="2.5" height="15.0" fill="rgb(217,202,7)" rx="2" ry="2" />
+<text text-anchor="" x="859.04" y="63.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeList::max_size (2 samples, 0.42%)</title><rect x="517.1" y="245" width="5.0" height="15.0" fill="rgb(222,163,17)" rx="2" ry="2" />
+<text text-anchor="" x="520.13" y="255.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>std::mutex::lock (10 samples, 2.10%)</title><rect x="388.5" y="197" width="24.7" height="15.0" fill="rgb(232,174,11)" rx="2" ry="2" />
+<text text-anchor="" x="391.49" y="207.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >s..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>x64_sys_call (2 samples, 0.42%)</title><rect x="1185.1" y="373" width="4.9" height="15.0" fill="rgb(238,36,1)" rx="2" ry="2" />
+<text text-anchor="" x="1188.05" y="383.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::FreeObject::next (1 samples, 0.21%)</title><rect x="489.9" y="229" width="2.5" height="15.0" fill="rgb(221,32,18)" rx="2" ry="2" />
+<text text-anchor="" x="492.92" y="239.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>WW::PageCache::objectToSpan (2 samples, 0.42%)</title><rect x="1167.7" y="325" width="5.0" height="15.0" fill="rgb(254,167,14)" rx="2" ry="2" />
+<text text-anchor="" x="1170.74" y="335.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>rcu_core (1 samples, 0.21%)</title><rect x="1182.6" y="165" width="2.5" height="15.0" fill="rgb(231,75,54)" rx="2" ry="2" />
+<text text-anchor="" x="1185.58" y="175.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>x64_sys_call (15 samples, 3.14%)</title><rect x="868.4" y="133" width="37.1" height="15.0" fill="rgb(207,222,18)" rx="2" ry="2" />
+<text text-anchor="" x="871.41" y="143.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >x64..</text>
+</g>
+</svg>

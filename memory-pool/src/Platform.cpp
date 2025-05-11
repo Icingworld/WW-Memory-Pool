@@ -9,27 +9,27 @@
 namespace WW
 {
 
-void * Platform::align_malloc(size_type alignment, size_type size)
+void * Platform::aligned_malloc(size_type _Alignment, size_type _Size)
 {
-    void * ptr = nullptr;
+    void * _Ptr = nullptr;
 
 #if defined(_WIN32) || defined(_WIN64)
-    ptr = _aligned_malloc(size, alignment);
+    _Ptr = _aligned_malloc(_Size, _Alignment);
 #elif defined(__linux__)
-    if (posix_memalign(&ptr, alignment, size) != 0) {
-        ptr = nullptr;
+    if (posix_memalign(&_Ptr, _Alignment, _Size) != 0) {
+        _Ptr = nullptr;
     }
 #endif
 
-    return ptr;
+    return _Ptr;
 }
 
-void Platform::align_free(void * ptr)
+void Platform::aligned_free(void * _Ptr)
 {
 #if defined(_WIN32) || defined(_WIN64)
-    _aligned_free(ptr);
+    _aligned_free(_Ptr);
 #elif defined(__linux__)
-    std::free(ptr);
+    std::free(_Ptr);
 #endif
 }
 

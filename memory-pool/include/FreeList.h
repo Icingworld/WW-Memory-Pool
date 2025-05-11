@@ -16,7 +16,7 @@ private:
 public:
     FreeObject();
 
-    explicit FreeObject(FreeObject * next);
+    explicit FreeObject(FreeObject * _Next);
 
     ~FreeObject() = default;
 
@@ -29,7 +29,7 @@ public:
     /**
      * @brief 设置下一个空闲内存块
      */
-    void setNext(FreeObject * next) noexcept;
+    void set_next(FreeObject * _Next) noexcept;
 };
 
 /**
@@ -41,7 +41,7 @@ private:
     FreeObject * _Free_object;       // 空闲内存块指针
 
 public:
-    explicit FreeListIterator(FreeObject * free_object) noexcept;
+    explicit FreeListIterator(FreeObject * _Free_object) noexcept;
 
     ~FreeListIterator() = default;
 
@@ -49,12 +49,12 @@ public:
     /**
      * @brief 迭代器是否相等
      */
-    bool operator==(const FreeListIterator & other) const noexcept;
+    bool operator==(const FreeListIterator & _Other) const noexcept;
 
     /**
      * @brief 迭代器是否不相等
      */
-    bool operator!=(const FreeListIterator & other) const noexcept;
+    bool operator!=(const FreeListIterator & _Other) const noexcept;
 
     /**
      * @brief 解引用迭代器
@@ -106,7 +106,7 @@ public:
     /**
      * @brief 将空闲内存块插入到链表头部
      */
-    void push_front(FreeObject * free_object);
+    void push_front(FreeObject * _Free_object);
 
     /**
      * @brief 从链表头部移除内存块
@@ -141,7 +141,7 @@ public:
     /**
      * @brief 设置最大大小
      */
-    void setMax(size_type count) noexcept;
+    void set_max_size(size_type _Max_size) noexcept;
 
     /**
      * @brief 清空链表

@@ -28,30 +28,30 @@ public:
     /**
      * @brief 获取中心缓存单例
      */
-    static CentralCache & getCentralCache();
+    static CentralCache & get_central_cache();
 
     /**
      * @brief 获取指定大小的空闲内存块
-     * @param size 内存块大小
-     * @param count 个数
+     * @param _Size 内存块大小
+     * @param _Count 个数
      * @return 成功时返回`FreeObject *`，失败时返回`nullptr`
      */
-    FreeObject * fetchRange(size_type size, size_type count);
+    FreeObject * fetch_range(size_type _Size, size_type _Count);
 
     /**
      * @brief 将空闲内存块归还到中心缓存
-     * @param size 内存块大小
-     * @param free_object 空闲内存块链表
+     * @param _Size 内存块大小
+     * @param _Free_object 空闲内存块链表
      */
-    void returnRange(size_type size, FreeObject * free_object);
+    void return_range(size_type _Size, FreeObject * _Free_object);
 
 private:
     /**
      * @brief 获取一个空闲的页段
-     * @param size 内存块大小
+     * @param _Size 内存块大小
      * @return 成功时返回`Span *`，失败时返回`nullptr`
      */
-    Span * getFreeSpan(size_type size);
+    Span * _Get_free_span(size_type _Size);
 };
 
 } // namespace WW

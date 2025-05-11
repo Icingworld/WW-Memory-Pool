@@ -13,24 +13,24 @@ Span::Span()
 {
 }
 
-size_type Span::id() const noexcept
+size_type Span::page_id() const noexcept
 {
     return _Page_id;
 }
 
-void Span::setId(size_type page_id) noexcept
+void Span::set_page_id(size_type _Page_id) noexcept
 {
-    _Page_id = page_id;
+    this->_Page_id = _Page_id;
 }
 
-size_type Span::count() const noexcept
+size_type Span::page_count() const noexcept
 {
     return _Page_count;
 }
 
-void Span::setCount(size_type count) noexcept
+void Span::set_page_count(size_type _Page_count) noexcept
 {
-    _Page_count = count;
+    this->_Page_count = _Page_count;
 }
 
 Span * Span::prev() const noexcept
@@ -38,9 +38,9 @@ Span * Span::prev() const noexcept
     return _Prev;
 }
 
-void Span::setPrev(Span * prev) noexcept
+void Span::set_prev(Span * _Prev) noexcept
 {
-    _Prev = prev;
+    this->_Prev = _Prev;
 }
 
 Span * Span::next() const noexcept
@@ -48,9 +48,9 @@ Span * Span::next() const noexcept
     return _Next;
 }
 
-void Span::setNext(Span * next) noexcept
+void Span::set_next(Span * _Next) noexcept
 {
-    _Next = next;
+    this->_Next = _Next;
 }
 
 size_type Span::used() const noexcept
@@ -58,39 +58,39 @@ size_type Span::used() const noexcept
     return _Used;
 }
 
-void Span::setUsed(size_type used) noexcept
+void Span::set_used(size_type _Used) noexcept
 {
-    _Used = used;
+    this->_Used = _Used;
 }
 
-FreeList * Span::getFreeList() noexcept
+FreeList * Span::get_free_list() noexcept
 {
     return &_Free_list;
 }
 
-size_type Span::ptrToId(void * ptr) noexcept
+size_type Span::ptr_to_id(void * _Ptr) noexcept
 {
-    return reinterpret_cast<std::uintptr_t>(ptr) >> PAGE_SHIFT;
+    return reinterpret_cast<std::uintptr_t>(_Ptr) >> PAGE_SHIFT;
 }
 
-void * Span::idToPtr(size_type id) noexcept
+void * Span::id_to_ptr(size_type _Id) noexcept
 {
-    return reinterpret_cast<void *>(id << PAGE_SHIFT);
+    return reinterpret_cast<void *>(_Id << PAGE_SHIFT);
 }
 
-SpanListIterator::SpanListIterator(Span * span) noexcept
-    : _Span(span)
+SpanListIterator::SpanListIterator(Span * _Span) noexcept
+    : _Span(_Span)
 {
 }
 
-bool SpanListIterator::operator==(const SpanListIterator & other) const noexcept
+bool SpanListIterator::operator==(const SpanListIterator & _Other) const noexcept
 {
-    return _Span == other._Span;
+    return _Span == _Other._Span;
 }
 
-bool SpanListIterator::operator!=(const SpanListIterator & other) const noexcept
+bool SpanListIterator::operator!=(const SpanListIterator & _Other) const noexcept
 {
-    return _Span != other._Span;
+    return _Span != _Other._Span;
 }
 
 Span & SpanListIterator::operator*() noexcept
@@ -133,8 +133,8 @@ SpanList::SpanList()
     : _Head()
     , _Mutex()
 {
-    _Head.setNext(&_Head);
-    _Head.setPrev(&_Head);
+    _Head.set_next(&_Head);
+    _Head.set_prev(&_Head);
 }
 
 Span & SpanList::front() noexcept
@@ -157,28 +157,28 @@ SpanList::iterator SpanList::end() noexcept
     return iterator(&_Head);
 }
 
-void SpanList::push_front(Span * span) noexcept
+void SpanList::push_front(Span * _Span) noexcept
 {
     Span * _Next = _Head.next();
-    span->setNext(_Next);
-    span->setPrev(&_Head);
-    _Next->setPrev(span);
-    _Head.setNext(span);
+    _Span->set_next(_Next);
+    _Span->set_prev(&_Head);
+    _Next->set_prev(_Span);
+    _Head.set_next(_Span);
 }
 
 void SpanList::pop_front() noexcept
 {
     Span * _Front = _Head.next();
-    _Head.setNext(_Front->next());
-    _Front->next()->setPrev(&_Head);
+    _Head.set_next(_Front->next());
+    _Front->next()->set_prev(&_Head);
 }
 
-void SpanList::erase(Span * span) noexcept
+void SpanList::erase(Span * _Span) noexcept
 {
-    Span * _Prev = span->prev();
-    Span * _Next = span->next();
-    _Prev->setNext(_Next);
-    _Next->setPrev(_Prev);
+    Span * _Prev = _Span->prev();
+    Span * _Next = _Span->next();
+    _Prev->set_next(_Next);
+    _Next->set_prev(_Prev);
 }
 
 bool SpanList::empty() const noexcept

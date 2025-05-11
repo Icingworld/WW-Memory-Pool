@@ -27,41 +27,41 @@ public:
     /**
      * @brief 获取线程缓存单例
      */
-    static ThreadCache & getThreadCache();
+    static ThreadCache & get_thread_cache();
 
     /**
      * @brief 申请内存
-     * @param size 内存大小
+     * @param _Size 内存大小
      * @return 成功返回`void *`，失败返回`nullptr`
      */
-    void * allocate(size_type size) noexcept;
+    void * allocate(size_type _Size) noexcept;
 
     /**
      * @brief 回收内存
-     * @param ptr 内存指针
-     * @param size 内存大小
+     * @param _Ptr 内存指针
+     * @param _Size 内存大小
      */
-    void deallocate(void * ptr, size_type size) noexcept;
+    void deallocate(void * _Ptr, size_type _Size) noexcept;
 
 private:
     /**
      * @brief 判断是否需要归还给中心缓存
-     * @param index 索引
+     * @param _Index 索引
      */
-    bool shouldReturn(size_type index)  const noexcept;
+    bool _Should_return(size_type _Index)  const noexcept;
 
     /**
      * @brief 从中心缓存获取一批内存块
-     * @param size 申请的内存块大小
+     * @param _Size 申请的内存块大小
      */
-    void fetchFromCentralCache(size_type size) noexcept;
+    void _Fetch_from_central_cache(size_type _Size) noexcept;
 
     /**
      * @brief 将一批内存块还给中心缓存
-     * @param index 归还内存所在的索引
-     * @param nums 归还的内存数量
+     * @param _Index 归还内存所在的索引
+     * @param _Nums 归还的内存数量
      */
-    void returnToCentralCache(size_type index, size_type nums) noexcept;
+    void _Return_to_central_cache(size_type _Index, size_type _Nums) noexcept;
 };
     
 } // namespace WW

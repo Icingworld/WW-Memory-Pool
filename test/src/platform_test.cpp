@@ -13,13 +13,13 @@ TEST(PatformTest, AlignedMallocAndFree)
     std::vector<void *> ptrs;
 
     for (int i = 0; i < COUNT; ++i) {
-        void * ptr = WW::Platform::align_malloc(WW::PAGE_SIZE, WW::PAGE_SIZE * WW::MAX_PAGE_NUM);
+        void * ptr = WW::Platform::aligned_malloc(WW::PAGE_SIZE, WW::PAGE_SIZE * WW::MAX_PAGE_NUM);
         ASSERT_NE(ptr, nullptr);
         ASSERT_TRUE(is_aligned(ptr, WW::PAGE_SIZE));
         ptrs.emplace_back(ptr);
     }
 
     for (int i = 0; i < COUNT; ++i) {
-        WW::Platform::align_free(ptrs[i]);
+        WW::Platform::aligned_free(ptrs[i]);
     }
 }
