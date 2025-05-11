@@ -36,35 +36,35 @@ public:
     /**
      * @brief 获取页缓存单例
      */
-    static PageCache & getPageCache();
+    static PageCache & get_page_cache();
 
     /**
      * @brief 获取指定大小的页段
-     * @param pages 页数
+     * @param _Pages 页数
      * @return 成功时返回`Span *`，失败时返回`nullptr`
      */
-    Span * fetchSpan(size_type pages);
+    Span * fetch_span(size_type _Pages);
 
     /**
      * @brief 将页段归还到页缓存
-     * @param span 页段
+     * @param _Span 页段
      */
-    void returnSpan(Span * span);
+    void return_span(Span * _Span);
 
     /**
      * @brief 通过内存块指针找到对应页段
-     * @param ptr 内存块指针
+     * @param _Ptr 内存块指针
      * @return 成功时返回`Span *`，失败时返回`nullptr`
      */
-    Span * objectToSpan(void * ptr) noexcept;
+    Span * object_to_span(void * _Ptr) noexcept;
 
 private:
     /**
      * @brief 从系统内存中获取指定大小的内存
-     * @param pages 页数
+     * @param _Pages 页数
      * @return 成功时返回`void *`，失败时返回`nullptr`
      */
-    void * fetchFromSystem(size_type pages) const noexcept;
+    void * _Fetch_from_system(size_type _Pages) const noexcept;
 };
 
 } // namespace WW

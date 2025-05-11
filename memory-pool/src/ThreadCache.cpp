@@ -13,116 +13,118 @@ ThreadCache::ThreadCache()
 ThreadCache::~ThreadCache()
 {
     // 归还所有内存块
-    for (size_type i = 0; i < _Free_lists.size(); ++i) {
-        if (!_Free_lists[i].empty()) {
-            returnToCentralCache(i, _Free_lists[i].size());
+    for (size_type _I = 0; _I < _Free_lists.size(); ++_I) {
+        if (!_Free_lists[_I].empty()) {
+            _Return_to_central_cache(_I, _Free_lists[_I].size());
         }
     }
 }
 
-ThreadCache & ThreadCache::getThreadCache()
+ThreadCache & ThreadCache::get_thread_cache()
 {
-    static thread_local ThreadCache threadCache;
-    return threadCache;
+    // 线程局部存储的单例
+    static thread_local ThreadCache _ThreadCache;
+    return _ThreadCache;
 }
 
-void * ThreadCache::allocate(size_type size) noexcept
+void * ThreadCache::allocate(size_type _Size) noexcept
 {
-    if (size == 0) {
+    if (_Size == 0) {
         return nullptr;
     }
 
-    if (size > MAX_MEMORY_SIZE) {
+    if (_Size > MAX_MEMORY_SIZE) {
         // 超出管理范围，直接从堆获取
-        return ::operator new(size, std::nothrow);
+        return ::operator new(_Size, std::nothrow);
     }
 
     // 获取对齐后的大小
-    size_type round_size = Size::roundUp(size);
+    size_type _Round_size = Size::round_up(_Size);
     // 找到所在的索引
-    size_type index = Size::sizeToIndex(round_size);
+    size_type _Index = Size::size_to_index(_Round_size);
 
-    if (_Free_lists[index].empty()) {
+    if (_Free_lists[_Index].empty()) {
         // 没有这种内存块，需要申请
-        fetchFromCentralCache(round_size);
+        _Fetch_from_central_cache(_Round_size);
     }
 
     // 有这种内存块，取一个出来
-    FreeObject * obj = _Free_lists[index].front();
-    _Free_lists[index].pop_front();
-    return reinterpret_cast<void *>(obj);
+    FreeObject * _Obj = _Free_lists[_Index].front();
+    _Free_lists[_Index].pop_front();
+    return reinterpret_cast<void *>(_Obj);
 }
 
-void ThreadCache::deallocate(void * ptr, size_type size) noexcept
+void ThreadCache::deallocate(void * _Ptr, size_type _size) noexcept
 {
-    if (size == 0) {
+    if (_size == 0) {
         return;
     }
 
-    if (size > MAX_MEMORY_SIZE) {
+    if (_size > MAX_MEMORY_SIZE) {
         // 从系统释放
-        ::operator delete(ptr, std::nothrow);
+        ::operator delete(_Ptr, std::nothrow);
         return;
     }
 
     // 获取对齐后的大小
-    size_type round_size = Size::roundUp(size);
+    size_type _Round_size = Size::round_up(_size);
     // 找到所在的索引
-    size_type index = Size::sizeToIndex(round_size);
+    size_type _Index = Size::size_to_index(_Round_size);
     // 把内存插入自由表
-    FreeObject * obj = reinterpret_cast<FreeObject *>(ptr);
-    _Free_lists[index].push_front(obj);
+    FreeObject * _Obj = reinterpret_cast<FreeObject *>(_Ptr);
+    _Free_lists[_Index].push_front(_Obj);
 
     // 检查是否需要归还给中心缓存
-    if (shouldReturn(index)) {
-        returnToCentralCache(index, _Free_lists[index].max_size());
+    if (_Should_return(_Index)) {
+        _Return_to_central_cache(_Index, _Free_lists[_Index].max_size());
     }
 }
 
-bool ThreadCache::shouldReturn(size_type index) const noexcept
+bool ThreadCache::_Should_return(size_type _Index) const noexcept
 {
-    // 超过一次申请的最大数量，归还一部分
-    if (_Free_lists[index].size() >= _Free_lists[index].max_size() * 2) {
+    // 超过一次申请的最大数量的两倍，归还一半
+    if (_Free_lists[_Index].size() >= _Free_lists[_Index].max_size() * 2) {
         return true;
     }
 
     return false;
 }
 
-void ThreadCache::fetchFromCentralCache(size_type size) noexcept
+void ThreadCache::_Fetch_from_central_cache(size_type _Size) noexcept
 {
     // 每次申请按照最大数量申请，并且提升最大数量
-    size_type index = Size::sizeToIndex(size);
-    size_type count = _Free_lists[index].max_size();
-    if (count > MAX_BLOCK_NUM) {
-        count = MAX_BLOCK_NUM;
+    size_type _Index = Size::size_to_index(_Size);
+    size_type _Count = _Free_lists[_Index].max_size();
+    if (_Count > MAX_BLOCK_NUM) {
+        _Count = MAX_BLOCK_NUM;
     }
 
-    FreeObject * obj = CentralCache::getCentralCache().fetchRange(size, count);
-    FreeObject * cur = obj;
+    FreeObject * _Obj = CentralCache::get_central_cache().fetch_range(_Size, _Count);
+    FreeObject * _Cur = _Obj;
     
-    while (cur != nullptr) {
-        FreeObject * next = cur->next();
-        _Free_lists[index].push_front(cur);
-        cur = next;
+    while (_Cur != nullptr) {
+        FreeObject * _Next = _Cur->next();
+        _Free_lists[_Index].push_front(_Cur);
+        _Cur = _Next;
     }
 
     // 提升最大数量
-    _Free_lists[index].setMax(count + 1);
+    _Free_lists[_Index].set_max_size(_Count + 1);
 }
 
-void ThreadCache::returnToCentralCache(size_type index, size_type nums) noexcept
+void ThreadCache::_Return_to_central_cache(size_type _Index, size_type _Nums) noexcept
 {
     // 取出nums个内存块组成链表
-    FreeObject * head = nullptr;
-    for (size_type i = 0; i < nums; ++i) {
-        FreeObject * obj = _Free_lists[index].front();
-        _Free_lists[index].pop_front();
-        obj->setNext(head);
-        head = obj;
+    FreeObject * _Head = nullptr;
+
+    for (size_type _I = 0; _I < _Nums; ++_I) {
+        FreeObject * _Obj = _Free_lists[_Index].front();
+        _Free_lists[_Index].pop_front();
+        _Obj->set_next(_Head);
+        _Head = _Obj;
     }
 
-    CentralCache::getCentralCache().returnRange(Size::indexToSize(index), head);
+    CentralCache::get_central_cache().return_range(Size::index_to_size(_Index), _Head);
 }
 
 } // namespace WW

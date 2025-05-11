@@ -30,22 +30,22 @@ public:
     /**
      * @brief 获取页号
      */
-    size_type id() const noexcept;
+    size_type page_id() const noexcept;
 
     /**
      * @brief 设置页号
      */
-    void setId(size_type id) noexcept;
+    void set_page_id(size_type _Page_id) noexcept;
 
     /**
      * @brief 获取页数
      */
-    size_type count() const noexcept;
+    size_type page_count() const noexcept;
 
     /**
      * @brief 设置页数
      */
-    void setCount(size_type count) noexcept;
+    void set_page_count(size_type _Page_count) noexcept;
 
     /**
      * @brief 获取上一个页段
@@ -55,7 +55,7 @@ public:
     /**
      * @brief 设置上一个页段
      */
-    void setPrev(Span * prev) noexcept;
+    void set_prev(Span * _Prev) noexcept;
 
     /**
      * @brief 获取下一个页段
@@ -65,7 +65,7 @@ public:
     /**
      * @brief 设置下一个页段
      */
-    void setNext(Span * next) noexcept;
+    void set_next(Span * _Next) noexcept;
 
     /**
      * @brief 获取空闲内存块数量
@@ -75,22 +75,22 @@ public:
     /**
      * @brief 设置空闲内存块数量
      */
-    void setUsed(size_type used) noexcept;
+    void set_used(size_type _Used) noexcept;
 
     /**
      * @brief 获取空闲内存块链表
      */
-    FreeList * getFreeList() noexcept;
+    FreeList * get_free_list() noexcept;
 
     /**
      * @brief 将内存地址转为页号
      */
-    static size_type ptrToId(void * ptr) noexcept;
+    static size_type ptr_to_id(void * _Ptr) noexcept;
 
     /**
      * @brief 将内存地址转为页号
      */
-    static void * idToPtr(size_type id) noexcept;
+    static void * id_to_ptr(size_type _Id) noexcept;
 };
 
 /**
@@ -102,7 +102,7 @@ private:
     Span * _Span;      // 页段指针
 
 public:
-    explicit SpanListIterator(Span * span) noexcept;
+    explicit SpanListIterator(Span * _Span) noexcept;
 
     ~SpanListIterator() = default;
 
@@ -110,12 +110,12 @@ public:
     /**
      * @brief 迭代器是否相等
      */
-    bool operator==(const SpanListIterator & other) const noexcept;
+    bool operator==(const SpanListIterator & _Other) const noexcept;
 
     /**
      * @brief 迭代器是否不相等
      */
-    bool operator!=(const SpanListIterator & other) const noexcept;
+    bool operator!=(const SpanListIterator & _Other) const noexcept;
 
     /**
      * @brief 解引用迭代器
@@ -195,7 +195,7 @@ public:
     /**
      * @brief 将页段插入到头部
      */
-    void push_front(Span * span) noexcept;
+    void push_front(Span * _Span) noexcept;
 
     /**
      * @brief 从头部删除页段
@@ -206,15 +206,15 @@ public:
      * @brief 删除指定页段
      * @param span 要删除的页段
      */
-    void erase(Span * span) noexcept;
+    void erase(Span * _Span) noexcept;
 
     /**
-     * @brief 上锁
+     * @brief 给页段加锁
      */
     void lock() noexcept;
 
     /**
-     * @brief 解锁
+     * @brief 给页段解锁
      */
     void unlock() noexcept;
 };
